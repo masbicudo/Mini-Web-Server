@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Configuration;
-using System.IO;
-using System.Reflection;
+using System.Diagnostics;
 
 namespace HttpFileServer
 {
@@ -10,7 +9,16 @@ namespace HttpFileServer
         static void Main(string[] args)
         {
             Console.BufferWidth = 200;
+
             var appSettings_Port = ConfigurationManager.AppSettings["port"];
+
+            var start = StringComparer.InvariantCultureIgnoreCase.Equals(
+                ConfigurationManager.AppSettings["start-browser"],
+                "TRUE");
+
+            if (start)
+                Process.Start("http://localhost:" + appSettings_Port);
+
             var server = new MyHttpServer(int.Parse(appSettings_Port));
             server.Start();
         }
