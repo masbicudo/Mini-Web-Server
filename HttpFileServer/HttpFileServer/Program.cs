@@ -88,9 +88,9 @@ namespace HttpFileServer
 
         private static void smoothExit(object sender, EventArgs e)
         {
-            //TrayIcon.Visible = false;
+            TrayIcon.Visible = false;
             Application.Exit();
-            //Environment.Exit(1);
+            Environment.Exit(1);
         }
 
         [DllImport("kernel32.dll", ExactSpelling = true)]
