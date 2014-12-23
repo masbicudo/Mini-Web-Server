@@ -36,8 +36,17 @@ namespace HttpFileServer
                 {
                 }
 
+            TrayIcon.Text = string.Format("Serving on port {0}", portToUse);
+            TrayIcon.ShowBalloonTip(
+                5000,
+                "Http File Server",
+                string.Format("Port {0}\nDir: {1}", portToUse, server.BasePath),
+                ToolTipIcon.None);
+
             if (start)
+            {
                 Process.Start("http://localhost:" + portToUse);
+            }
 
             Application.Run();
         }

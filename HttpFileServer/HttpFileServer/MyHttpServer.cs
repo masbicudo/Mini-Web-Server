@@ -102,6 +102,8 @@ namespace HttpFileServer
                 { "PUT", HttpVerbs.Put },
             };
 
+        private string basePath;
+
         private async Task HandleClient(TcpClient tcpClient)
         {
             //// Reusable SocketAsyncEventArgs and awaitable wrapper
@@ -203,10 +205,7 @@ namespace HttpFileServer
 
 
                     // SENDING RESPONSE
-                    var basePath = Environment.CurrentDirectory;
-#if DEBUG
-                    basePath = @"c:\Profile - MASB\Desktop\Scripts";
-#endif
+                    var basePath = BasePath;
                     var fileFullName = Path.Combine(basePath, uri.LocalPath.TrimStart('/'));
 
                     string contentType = null;
@@ -286,6 +285,28 @@ namespace HttpFileServer
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("Exception in HandleClient: " + exe.Message);
+            }
+        }
+
+        public string BasePath
+        {
+            get
+            {
+                if (this.basePath != null)
+                {
+                    return this.basePath;
+                }
+
+                var path = Environment.CurrentDirectory;
+#if DEBUG
+                path = @"c:\Profile - MASB\Desktop\Scripts";
+#endif
+                return path;
+            }
+
+            set
+            {
+                this.basePath = value;
             }
         }
 
