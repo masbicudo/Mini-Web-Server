@@ -14,25 +14,35 @@ namespace HttpFileServer
 {
     public class MyHttpServer
     {
-        private readonly TcpListener tcpListenerIPv4;
-        private readonly TcpListener tcpListenerIPv6;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
 
-        public MyHttpServer(int port)
+        private TcpListener tcpListenerIPv4;
+        private TcpListener tcpListenerIPv6;
+        private Thread thread;
+
+        public void Start(int port)
         {
             this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
-            this.tcpListenerIPv6 = new TcpListener(IPAddress.IPv6Any, port);
-        }
+            this.tcpListenerIPv4.Start();
+            Console.WriteLine("IPv4 Server started!");
 
-        public void Start()
-        {
-            var thread = new Thread(() =>
+            this.tcpListenerIPv6 = new TcpListener(IPAddress.IPv6Any, port);
+            this.tcpListenerIPv6.Start();
+            Console.WriteLine("IPv6 Server started!");
+
+            this.thread = new Thread(() =>
                 {
                     var taskIPv4 = this.ListeningToClientsIPv4();
                     var taskIPv6 = this.ListeningToClientsIPv6();
                     Task.WaitAll(new[] { taskIPv4, taskIPv6 }, this.cancellation.Token);
                 });
-            thread.Start();
+            this.thread.Start();
+        }
+
+        public void Join()
+        {
+            if (this.thread != null && this.thread.IsAlive)
+                this.thread.Join();
         }
 
         public void Cancel()
@@ -44,10 +54,6 @@ namespace HttpFileServer
         {
             try
             {
-                this.tcpListenerIPv4.Start();
-
-                Console.WriteLine("IPv4 Server started!");
-
                 while (!this.cancellation.IsCancellationRequested)
                 {
                     var tcpClient = await this.tcpListenerIPv4.AcceptTcpClientAsync();
@@ -68,10 +74,6 @@ namespace HttpFileServer
         {
             try
             {
-                this.tcpListenerIPv6.Start();
-
-                Console.WriteLine("IPv6 Server started!");
-
                 while (!this.cancellation.IsCancellationRequested)
                 {
                     var tcpClient = await this.tcpListenerIPv6.AcceptTcpClientAsync();
@@ -331,21 +333,20 @@ namespace HttpFileServer
     <head>
         <title>Dir</title>
         <style>
-            a {
+            div.item {
                 font-family: monospace;
                 font-size: 16px;
                 margin: 8px;
-                display: block;
             }
-            a > * {
+            div.item a > * {
                 vertical-align: middle;
             }
-            a > img {
+            div.item a > img {
                 margin-right: 8px;
             }
-            a.dir {
+            div.item a.dir {
             }
-            a.file {
+            div.item a.file {
             }
         </style>
     </head>
@@ -361,21 +362,24 @@ namespace HttpFileServer
             IEnumerable<string> linksList = new string[0];
 
             if (!isRoot)
-                linksList = linksList.Concat(new[] { "<a class='parent dir' href='" + Uri.EscapeUriString("..") + "'>" + ".." + "</a>" });
+                linksList = linksList.Concat(new[]
+                    {
+                        "<div class='item parent dir'><a href='" + Uri.EscapeUriString("..") + "'>" + ".." + "</a></div>"
+                    });
 
             var currentPath = uri.LocalPath.TrimEnd('/');
 
             linksList = linksList.Concat(
                 dir.GetDirectories().Select(
-                    sd => "<a class='dir' href='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "'>"
+                    sd => "<div class='item dir'><a href='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "'>"
                         + "<img src='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "?icon=16" + "' width='16' height='16' />"
-                        + sd.Name + "</a>"));
+                        + sd.Name + "</a></div>"));
 
             linksList = linksList.Concat(
                 dir.GetFiles().Select(
-                    sd => "<a class='file' href='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "'>"
+                    sd => "<div class='item file'><a href='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "'>"
                         + "<img src='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "?icon=16" + "' width='16' height='16' />"
-                        + sd.Name + "</a>"));
+                        + sd.Name + "</a></div>"));
 
             str = str.Replace("%LIST%", string.Join("\n", linksList));
 

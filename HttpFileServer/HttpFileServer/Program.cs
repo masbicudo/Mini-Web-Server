@@ -16,11 +16,23 @@ namespace HttpFileServer
                 ConfigurationManager.AppSettings["start-browser"],
                 "TRUE");
 
-            if (start)
-                Process.Start("http://localhost:" + appSettings_Port);
+            var server = new MyHttpServer();
+            var portToUse = 0;
+            for (int it = 0; it < 100; it++)
+                try
+                {
+                    portToUse = int.Parse(appSettings_Port) + it;
+                    server.Start(portToUse);
+                    break;
+                }
+                catch
+                {
+                }
 
-            var server = new MyHttpServer(int.Parse(appSettings_Port));
-            server.Start();
+            if (start)
+                Process.Start("http://localhost:" + portToUse);
+
+            server.Join();
         }
     }
 }
