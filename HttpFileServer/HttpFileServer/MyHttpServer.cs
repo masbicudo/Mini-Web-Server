@@ -20,8 +20,16 @@ namespace HttpFileServer
         private TcpListener tcpListenerIPv6;
         private Thread thread;
 
-        public void Start(int port)
+        /// <summary>
+        /// Starts the file HTTP server.
+        /// </summary>
+        /// <param name="host">The host to accept requests for.</param>
+        /// <param name="port">The port number to accept connections.</param>
+        public void Start(string host = "localhost", int port = 80)
         {
+            if (host == null)
+                throw new ArgumentNullException("host");
+
             this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
             this.tcpListenerIPv4.Start();
             Console.WriteLine("IPv4 Server started!");
@@ -34,6 +42,7 @@ namespace HttpFileServer
                 {
                     var taskIPv4 = this.ListeningToClientsIPv4();
                     var taskIPv6 = this.ListeningToClientsIPv6();
+                    this.host = host;
                     Task.WaitAll(new[] { taskIPv4, taskIPv6 }, this.cancellation.Token);
                 });
             this.thread.Start();
@@ -103,6 +112,7 @@ namespace HttpFileServer
             };
 
         private string basePath;
+        private string host;
 
         private async Task HandleClient(TcpClient tcpClient)
         {
@@ -178,6 +188,9 @@ namespace HttpFileServer
                             port = clientEndPoint.Port;
                         }
                     }
+
+                    if (host != this.host)
+                        throw new Exception("Cannot accept host: " + host);
 
                     string pathNoQuery;
                     string query = null;
