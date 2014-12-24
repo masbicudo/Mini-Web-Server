@@ -12,6 +12,7 @@ namespace HttpFileServer
     {
         private static int usedPort;
         private static string usedHost;
+        private static MyHttpServer server;
 
         static void Main(string[] args)
         {
@@ -20,18 +21,39 @@ namespace HttpFileServer
 
             Console.BufferWidth = 200;
 
-            var appSettings_Port = ConfigurationManager.AppSettings["port"];
-            var appSettings_Host = ConfigurationManager.AppSettings["host"];
+            StartServer();
 
-            usedHost = string.IsNullOrWhiteSpace(appSettings_Host)
-                           ? "localhost"
-                           : appSettings_Host;
+            TrayIcon.Text = string.Format("Serving {0}:{1}", usedHost, usedPort);
+            TrayIcon.ShowBalloonTip(
+                5000,
+                "Http File Server",
+                string.Format("Host: {0}\nPort: {1}\nDir: {2}", usedHost, usedPort, server.BasePath),
+                ToolTipIcon.None);
 
             var start = StringComparer.InvariantCultureIgnoreCase.Equals(
                 ConfigurationManager.AppSettings["start-browser"],
                 "TRUE");
 
-            var server = new MyHttpServer();
+            if (start)
+            {
+                Process.Start(string.Format("http://{0}:{1}", usedHost, usedPort));
+            }
+
+            Application.Run();
+        }
+
+        private static void StartServer()
+        {
+            ConfigurationManager.RefreshSection("appSettings");
+            var appSettings_Host = ConfigurationManager.AppSettings["host"];
+            var appSettings_Port = ConfigurationManager.AppSettings["port"];
+
+            server = new MyHttpServer();
+
+            usedHost = string.IsNullOrWhiteSpace(appSettings_Host)
+                           ? "localhost"
+                           : appSettings_Host;
+
             usedPort = 0;
             for (int it = 0; it < 100; it++)
                 try
@@ -43,20 +65,6 @@ namespace HttpFileServer
                 catch
                 {
                 }
-
-            TrayIcon.Text = string.Format("Serving {0}:{1}", usedHost, usedPort);
-            TrayIcon.ShowBalloonTip(
-                5000,
-                "Http File Server",
-                string.Format("Host: {0}\nPort: {1}\nDir: {2}", usedHost, usedPort, server.BasePath),
-                ToolTipIcon.None);
-
-            if (start)
-            {
-                Process.Start(string.Format("http://{0}:{1}", usedHost, usedPort));
-            }
-
-            Application.Run();
         }
 
         #region Tray Icon
@@ -78,6 +86,7 @@ namespace HttpFileServer
             TrayIcon.ContextMenuStrip.Items.AddRange(new[]
                 {
                     new ToolStripMenuItem("Open in browser", null, openInBrowser),
+                    new ToolStripMenuItem("Restart", null, restart),
                     new ToolStripMenuItem("Exit", null, smoothExit),
                 });
 
@@ -94,6 +103,20 @@ namespace HttpFileServer
                 showWindow = ++showWindow % 2;
                 ShowWindow(ThisConsole, showWindow);
             }
+        }
+
+        private static void restart(object sender, EventArgs e)
+        {
+            server.Cancel(true);
+
+            StartServer();
+
+            TrayIcon.Text = string.Format("Serving {0}:{1}", usedHost, usedPort);
+            TrayIcon.ShowBalloonTip(
+                5000,
+                "Http File Server",
+                string.Format("Host: {0}\nPort: {1}\nDir: {2}", usedHost, usedPort, server.BasePath),
+                ToolTipIcon.None);
         }
 
         private static void openInBrowser(object sender, EventArgs e)

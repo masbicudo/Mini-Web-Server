@@ -19,6 +19,7 @@ namespace HttpFileServer
         private TcpListener tcpListenerIPv4;
         private TcpListener tcpListenerIPv6;
         private Thread thread;
+        private int canceled;
 
         /// <summary>
         /// Starts the file HTTP server.
@@ -32,10 +33,12 @@ namespace HttpFileServer
 
             this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
             this.tcpListenerIPv4.Start();
+            Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("IPv4 Server started!");
 
             this.tcpListenerIPv6 = new TcpListener(IPAddress.IPv6Any, port);
             this.tcpListenerIPv6.Start();
+            Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("IPv6 Server started!");
 
             this.thread = new Thread(() =>
@@ -43,7 +46,23 @@ namespace HttpFileServer
                     var taskIPv4 = this.ListeningToClientsIPv4();
                     var taskIPv6 = this.ListeningToClientsIPv6();
                     this.host = host;
-                    Task.WaitAll(new[] { taskIPv4, taskIPv6 }, this.cancellation.Token);
+
+                    try
+                    {
+                        Task.WaitAll(new[] { taskIPv4, taskIPv6 }, this.cancellation.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        this.tcpListenerIPv4.Stop();
+                        this.tcpListenerIPv6.Stop();
+                    }
+
+                    Interlocked.Exchange(ref this.canceled, -1);
+
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("----------------");
+                    Console.WriteLine("Server finished!");
+                    Console.WriteLine("----------------");
                 });
             this.thread.Start();
         }
@@ -54,9 +73,12 @@ namespace HttpFileServer
                 this.thread.Join();
         }
 
-        public void Cancel()
+        public void Cancel(bool waitFullCancellation)
         {
             this.cancellation.Cancel();
+            if (waitFullCancellation)
+                while (this.canceled == 0)
+                    Thread.Sleep(0);
         }
 
         private async Task ListeningToClientsIPv4()
@@ -73,8 +95,13 @@ namespace HttpFileServer
                     // ReSharper restore CSharpWarnings::CS4014
                 }
             }
+            catch (OperationCanceledException)
+            {
+                this.tcpListenerIPv4.Stop();
+            }
             catch (Exception ex)
             {
+                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("ListeningToClientsIPv4: " + ex.Message);
             }
         }
@@ -93,8 +120,13 @@ namespace HttpFileServer
                     // ReSharper restore CSharpWarnings::CS4014
                 }
             }
+            catch (OperationCanceledException)
+            {
+                this.tcpListenerIPv6.Stop();
+            }
             catch (Exception ex)
             {
+                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("ListeningToClientsIPv6: " + ex.Message);
             }
         }
