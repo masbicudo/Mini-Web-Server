@@ -309,14 +309,19 @@ namespace HttpFileServer
                     if (ex != null)
                     {
                         await writer.WriteLineAsync("HTTP/1.1 404 Not Found");
-                        await writer.WriteLineAsync("Content-Length: " + fileBytes.Length);
                     }
                     else
                     {
                         await writer.WriteLineAsync("HTTP/1.1 200 OK");
-                        await writer.WriteLineAsync("Content-Length: " + fileBytes.Length);
-                        await writer.WriteLineAsync("Content-Type: " + contentType);
                     }
+
+                    await writer.WriteLineAsync("Date: " + DateTime.Now.ToString("R"));
+                    await writer.WriteLineAsync("Server: Mini-Http-Server");
+                    //await writer.WriteLineAsync("Last-Modified: Tue, 01 Dec 2009 20:18:22 GMT");
+                    //await writer.WriteLineAsync(@"ETag: ""51142bc1-7449-479b075b2891b""");
+                    await writer.WriteLineAsync("Accept-Ranges: bytes");
+                    await writer.WriteLineAsync("Content-Length: " + fileBytes.Length);
+                    await writer.WriteLineAsync("Content-Type: " + contentType);
 
                     await writer.WriteLineAsync("");
                     await writer.FlushAsync();
