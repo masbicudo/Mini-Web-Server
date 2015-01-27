@@ -252,6 +252,14 @@ namespace HttpFileServer
                     // SENDING RESPONSE
                     var basePath = BasePath;
                     var fileFullName = Path.Combine(basePath, uri.LocalPath.TrimStart('/'));
+                    DateTime? fileDate = null;
+                    try
+                    {
+                        fileDate = File.GetLastWriteTimeUtc(fileFullName);
+                    }
+                    catch
+                    {
+                    }
 
                     string contentType = null;
                     byte[] fileBytes = null;
@@ -287,12 +295,14 @@ namespace HttpFileServer
                             {
                                 fileBytes = GetDirectoryBytes(fileFullName, uri);
                                 contentType = MimeUtils.GetMimeType("html");
+                                contentType += "; charset=utf-8";
                             }
                         }
                         else
                         {
                             fileBytes = GetNotFoundBytes(uri);
                             contentType = MimeUtils.GetMimeType("html");
+                            contentType += "; charset=utf-8";
                         }
                     }
                     catch (Exception ex1)
@@ -304,6 +314,7 @@ namespace HttpFileServer
                     {
                         fileBytes = GetErrorBytes(ex);
                         contentType = MimeUtils.GetMimeType("html");
+                        contentType += "; charset=utf-8";
                     }
 
                     if (ex != null)
@@ -315,14 +326,14 @@ namespace HttpFileServer
                         await writer.WriteLineAsync("HTTP/1.1 200 OK");
                     }
 
-                    await writer.WriteLineAsync("Date: " + DateTime.Now.ToString("R"));
+                    await writer.WriteLineAsync("Date: " + DateTime.UtcNow.ToString("R"));
                     await writer.WriteLineAsync("Server: Mini-Http-Server");
                     //await writer.WriteLineAsync("Last-Modified: Tue, 01 Dec 2009 20:18:22 GMT");
                     //await writer.WriteLineAsync(@"ETag: ""51142bc1-7449-479b075b2891b""");
                     await writer.WriteLineAsync("Accept-Ranges: bytes");
                     await writer.WriteLineAsync("Content-Length: " + fileBytes.Length);
                     await writer.WriteLineAsync("Content-Type: " + contentType);
-
+                    await writer.WriteLineAsync("Last-Modified: " + (fileDate ?? DateTime.UtcNow).ToString("R"));
                     await writer.WriteLineAsync("");
                     await writer.FlushAsync();
 
@@ -378,8 +389,7 @@ namespace HttpFileServer
 
         private static byte[] GetNotFoundBytes(Uri uri)
         {
-            return Encoding.UTF8.GetBytes(@"
-<!DOCTYPE html>
+            return Encoding.UTF8.GetBytes(@"<!DOCTYPE html>
 <html>
     <head>
         <title>Not found</title>
@@ -398,8 +408,7 @@ namespace HttpFileServer
 
             var isRoot = uri.LocalPath == "" || uri.LocalPath == "/";
 
-            var str = @"
-<!DOCTYPE html>
+            var str = @"<!DOCTYPE html>
 <html>
     <head>
         <title>Dir</title>
@@ -459,8 +468,7 @@ namespace HttpFileServer
 
         private static byte[] GetErrorBytes(Exception ex)
         {
-            return Encoding.UTF8.GetBytes(@"
-<!DOCTYPE html>
+            return Encoding.UTF8.GetBytes(@"<!DOCTYPE html>
 <html>
     <head>
         <title>%EX%</title>
