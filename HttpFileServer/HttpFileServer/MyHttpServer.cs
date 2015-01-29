@@ -34,18 +34,18 @@ namespace HttpFileServer
             if (host == null)
                 throw new ArgumentNullException("host");
 
-            this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
-            this.tcpListenerIPv4.Start();
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("IPv4 Server started!");
-
-            this.tcpListenerIPv6 = new TcpListener(IPAddress.IPv6Any, port);
-            this.tcpListenerIPv6.Start();
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("IPv6 Server started!");
-
             this.thread = new Thread(() =>
                 {
+                    this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
+                    this.tcpListenerIPv4.Start();
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("IPv4 Server started!");
+
+                    this.tcpListenerIPv6 = new TcpListener(IPAddress.IPv6Any, port);
+                    this.tcpListenerIPv6.Start();
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("IPv6 Server started!");
+
                     var taskIPv4 = this.ListeningToClientsIPv4();
                     var taskIPv6 = this.ListeningToClientsIPv6();
                     this.host = host;
@@ -172,8 +172,8 @@ namespace HttpFileServer
                 var stream = tcpClient.GetStream();
                 Console.ForegroundColor = ConsoleColor.Blue;
                 Console.WriteLine("Handling client");
-                using (var reader = new StreamReader(stream, Encoding.UTF8))
-                using (var writer = new StreamWriter(stream, Encoding.UTF8))
+                using (var reader = new StreamReader(stream, Encoding.ASCII))
+                using (var writer = new StreamWriter(stream, Encoding.ASCII))
                 {
                     string line;
 
