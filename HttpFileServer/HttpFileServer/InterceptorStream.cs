@@ -13,11 +13,45 @@ namespace HttpFileServer
     /// A stream that will intercept reads and writes to another inner stream,
     /// and log reads and writes using other logging streams.
     /// </summary>
+    public class InterceptorStream<TStreamInner, TStreamReadLog, TStreamWriteLog> : InterceptorStream
+        where TStreamInner : Stream
+        where TStreamReadLog : Stream
+        where TStreamWriteLog : Stream
+    {
+        public InterceptorStream([NotNull] TStreamInner inner, IEnumerable<TStreamReadLog> readLogStream, IEnumerable<TStreamWriteLog> writeLogStream)
+            : base(inner, readLogStream, writeLogStream)
+        {
+        }
+
+        public TStreamInner Inner
+        {
+            get { return (TStreamInner)this.inner; }
+        }
+
+        public IEnumerable<TStreamWriteLog> WriteLoggers
+        {
+            get { return this.writeLog.OfType<TStreamWriteLog>(); }
+        }
+
+        public IEnumerable<TStreamReadLog> ReadLoggers
+        {
+            get { return this.readLog.OfType<TStreamReadLog>(); }
+        }
+    }
+    public class InterceptorStream<TStreamInner, TLogStream> : InterceptorStream
+        where TStreamInner : Stream
+        where TLogStream : Stream
+    {
+        public InterceptorStream([NotNull] TStreamInner inner, IEnumerable<TLogStream> readLogStream, IEnumerable<TLogStream> writeLogStream)
+            : base(inner, readLogStream, writeLogStream)
+        {
+        }
+    }
     public class InterceptorStream : Stream
     {
-        private readonly Stream inner;
-        private readonly Stream[] readLog;
-        private readonly Stream[] writeLog;
+        protected readonly Stream inner;
+        protected readonly Stream[] readLog;
+        protected readonly Stream[] writeLog;
 
         public InterceptorStream([NotNull] Stream inner, [CanBeNull] IEnumerable<Stream> readLog = null, [CanBeNull] IEnumerable<Stream> writeLog = null)
         {
@@ -250,6 +284,14 @@ namespace HttpFileServer
                 stream.Dispose();
             foreach (var stream in this.writeLog)
                 stream.Dispose();
+        }
+
+        public static InterceptorStream<TStreamInner, TStreamReadLog, TStreamWriteLog> Create<TStreamInner, TStreamReadLog, TStreamWriteLog>(TStreamInner innerStream, TStreamReadLog readLogStream, TStreamWriteLog writeLogStream)
+            where TStreamInner : Stream
+            where TStreamReadLog : Stream
+            where TStreamWriteLog : Stream
+        {
+            return new InterceptorStream<TStreamInner, TStreamReadLog, TStreamWriteLog>(innerStream, new[] { readLogStream }, new[] { writeLogStream });
         }
     }
 }

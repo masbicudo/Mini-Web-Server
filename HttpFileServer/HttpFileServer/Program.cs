@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -13,6 +14,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using TGREER;
 
 namespace HttpFileServer
 {
@@ -162,13 +164,13 @@ namespace HttpFileServer
 
             string line0 = null;
 
-            using (var stream = new InterceptorStream(
+            using (var stream = InterceptorStream.Create(
                 tcpClient.GetStream(),
-                new[] { File.Open("read-log", FileMode.Create, FileAccess.Write) },
-                new[] { File.Open("write-log", FileMode.Create, FileAccess.Write) }
+                File.Open("read-log", FileMode.Create, FileAccess.Write),
+                File.Open("write-log", FileMode.Create, FileAccess.Write)
                 ))
-            using (var reader = new StreamReader(stream, Encoding.UTF8))
-            using (var writer = new StreamWriter(stream, Encoding.UTF8))
+            using (var reader = new myStreamReader(stream, Encoding.ASCII))
+            using (var writer = new StreamWriter(stream, Encoding.ASCII))
             {
                 // Sending GET request
                 var verb = HttpVerbs.Get;
@@ -176,10 +178,13 @@ namespace HttpFileServer
                 pathQuery = pathQuery == "" || pathQuery[0] != '/' ? '/' + pathQuery : pathQuery;
 
                 await writer.WriteHttpHeaderAsync(string.Format("GET {0} HTTP/1.1", pathQuery));
-                await writer.WriteHttpHeaderAsync("User-Agent", "Mini-Http-Client");
-                await writer.WriteHttpHeaderAsync("Pragma", "no-cache");
-                await writer.WriteHttpHeaderAsync("Accept-Language", "en-US");
+
                 await writer.WriteHttpHeaderAsync("Host", uri.Host);
+                await writer.WriteHttpHeaderAsync("Cache-Control", "max-age=0");
+                await writer.WriteHttpHeaderAsync("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+                await writer.WriteHttpHeaderAsync("User-Agent", "Mini-Http-Client");
+                await writer.WriteHttpHeaderAsync("Accept-Language", "en-US");
+                await writer.WriteHttpHeaderAsync("");
                 await writer.FlushAsync();
 
 
@@ -229,8 +234,11 @@ namespace HttpFileServer
                     if (!long.TryParse(tempStr, out contentLength))
                         contentLength = -1;
 
+                var readNetPos = stream.ReadLoggers.Single().Position;
+                var readStrPos = reader.BytesRead;
+
                 var buffer = new byte[4096];
-                var remaining = contentLength < 0 ? long.MaxValue : contentLength;
+                var remaining = (contentLength < 0 ? long.MaxValue : contentLength) - (readNetPos - readStrPos);
                 var dateLastReceived = DateTime.UtcNow;
                 while (remaining > 0 || contentLength < 0)
                 {
