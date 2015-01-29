@@ -177,7 +177,15 @@ namespace HttpFileServer
                 {
                     string line;
 
-                    line = await reader.ReadLineAsync();
+                    line = reader.ReadLine();
+
+                    if (line == null)
+                    {
+                        var oldColor = Console.ForegroundColor;
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Null request first line");
+                        Console.ForegroundColor = oldColor;
+                    }
 
                     HttpVerbs verb = 0;
                     string path = null;
@@ -297,15 +305,14 @@ namespace HttpFileServer
                                 if (this.dateFirstIcon == null || DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(2))
                                 {
                                     this.dateFirstIcon = this.dateFirstIcon ?? DateTime.UtcNow;
-                                    while (DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(2))
-                                        await Task.Delay(500);
+                                    await Task.Delay(2000);
+                                    goto REPEAT;
                                 }
 
                                 fileBytes = IconAsSizedPng(icon, iconSize);
-                                if (this.dateFirstIcon == null || fileBytes.Length == 1092
-                                    && DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(10))
+                                if (fileBytes.Length == 1092 && DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(10))
                                 {
-                                    this.dateFirstIcon = DateTime.UtcNow;
+                                    await Task.Delay(1000);
                                     goto REPEAT;
                                 }
 
@@ -365,10 +372,7 @@ namespace HttpFileServer
                     await writer.WriteHttpHeaderAsync("Server", "Mini-Http-Server");
                     //await writer.WriteLineAsync(@"ETag: ""51142bc1-7449-479b075b2891b""");
                     await writer.WriteHttpHeaderAsync("Accept-Ranges", "bytes");
-                    await
-                        writer.WriteHttpHeaderAsync(
-                            "Content-Length",
-                            fileBytes.Length.ToString(CultureInfo.InvariantCulture));
+                    await writer.WriteHttpHeaderAsync("Content-Length", "" + fileBytes.Length);
                     await writer.WriteHttpHeaderAsync("Content-Type", contentType);
                     await writer.WriteHttpHeaderAsync("Last-Modified", (fileDate ?? DateTime.UtcNow).ToString("R"));
                     await writer.WriteHttpHeaderAsync("");
