@@ -54,6 +54,7 @@
     <Compile Include="Resources.cs" />
     <Compile Include="SocketAwaitable.cs" />
     <Compile Include="SocketExtensions.cs" />
+    <Compile Include="StreamWriterExtensions.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

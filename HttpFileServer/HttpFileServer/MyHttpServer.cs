@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -9,6 +11,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Schema;
 
 namespace HttpFileServer
 {
@@ -337,22 +340,24 @@ namespace HttpFileServer
 
                     if (ex != null)
                     {
-                        await writer.WriteLineAsync("HTTP/1.1 404 Not Found");
+                        await writer.WriteHttpHeaderAsync("HTTP/1.1 404 Not Found");
                     }
                     else
                     {
-                        await writer.WriteLineAsync("HTTP/1.1 200 OK");
+                        await writer.WriteHttpHeaderAsync("HTTP/1.1 200 OK");
                     }
 
-                    await writer.WriteLineAsync("Date: " + DateTime.UtcNow.ToString("R"));
-                    await writer.WriteLineAsync("Server: Mini-Http-Server");
-                    //await writer.WriteLineAsync("Last-Modified: Tue, 01 Dec 2009 20:18:22 GMT");
+                    await writer.WriteHttpHeaderAsync("Date", DateTime.UtcNow.ToString("R"));
+                    await writer.WriteHttpHeaderAsync("Server", "Mini-Http-Server");
                     //await writer.WriteLineAsync(@"ETag: ""51142bc1-7449-479b075b2891b""");
-                    await writer.WriteLineAsync("Accept-Ranges: bytes");
-                    await writer.WriteLineAsync("Content-Length: " + fileBytes.Length);
-                    await writer.WriteLineAsync("Content-Type: " + contentType);
-                    await writer.WriteLineAsync("Last-Modified: " + (fileDate ?? DateTime.UtcNow).ToString("R"));
-                    await writer.WriteLineAsync("");
+                    await writer.WriteHttpHeaderAsync("Accept-Ranges", "bytes");
+                    await
+                        writer.WriteHttpHeaderAsync(
+                            "Content-Length",
+                            fileBytes.Length.ToString(CultureInfo.InvariantCulture));
+                    await writer.WriteHttpHeaderAsync("Content-Type", contentType);
+                    await writer.WriteHttpHeaderAsync("Last-Modified", (fileDate ?? DateTime.UtcNow).ToString("R"));
+                    await writer.WriteHttpHeaderAsync("");
                     await writer.FlushAsync();
 
                     await stream.WriteAsync(fileBytes, 0, fileBytes.Length);
