@@ -1,9 +1,17 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace HttpFileServer
@@ -86,6 +94,7 @@ namespace HttpFileServer
             TrayIcon.ContextMenuStrip.Items.AddRange(new[]
                 {
                     new ToolStripMenuItem("Open in browser", null, openInBrowser),
+                    new ToolStripMenuItem("Make request", null, testRequest),
                     new ToolStripMenuItem("Restart", null, restart),
                     new ToolStripMenuItem("Exit", null, smoothExit),
                 });
@@ -129,6 +138,110 @@ namespace HttpFileServer
             TrayIcon.Visible = false;
             Application.Exit();
             Environment.Exit(1);
+        }
+
+        private static void testRequest(object sender, EventArgs e)
+        {
+            var thread = new Thread(() => TestRequestAsync().Wait());
+            thread.Start();
+        }
+
+        private static async Task TestRequestAsync()
+        {
+            var form = new MakeRequestForm();
+            form.ShowDialog();
+            var uri = form.Uri;
+
+            var tcpClient = new TcpClient();
+            await tcpClient.ConnectAsync(uri.Host, uri.Port);
+
+            string line0 = null;
+
+            using (var stream = new InterceptorStream(
+                tcpClient.GetStream(),
+                new[] { File.Open("read-log", FileMode.Create, FileAccess.Write) },
+                new[] { File.Open("write-log", FileMode.Create, FileAccess.Write) }
+                ))
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+            using (var writer = new StreamWriter(stream, Encoding.UTF8))
+            {
+                // Sending GET request
+                var verb = HttpVerbs.Get;
+                var pathQuery = uri.PathAndQuery ?? "";
+                pathQuery = pathQuery == "" || pathQuery[0] != '/' ? '/' + pathQuery : pathQuery;
+
+                await writer.WriteHttpHeaderAsync(string.Format("GET {0} HTTP/1.1", pathQuery));
+                await writer.WriteHttpHeaderAsync("User-Agent", "Mini-Http-Client");
+                await writer.WriteHttpHeaderAsync("Pragma", "no-cache");
+                await writer.WriteHttpHeaderAsync("Accept-Language", "en-US");
+                await writer.WriteHttpHeaderAsync("Host", uri.Host);
+                await writer.FlushAsync();
+
+
+
+                var line = await reader.ReadLineAsync();
+                line0 = line;
+
+                if (line == null)
+                {
+                    MessageBox.Show("Request returned nothing.");
+                    return;
+                }
+
+                HttpStatusCode statusCode = 0;
+                string message = null;
+
+                {
+                    var match = Regex.Match(line, @"^HTTP/1.[01] (?<CODE>\d+) (?<MSG>.*)$");
+                    if (match.Success)
+                    {
+                        statusCode = (HttpStatusCode)int.Parse(match.Groups["CODE"].Value);
+                        message = match.Groups["MSG"].Value;
+                    }
+                }
+
+                var headers = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
+                bool inHeader = true;
+                while ((line = await reader.ReadLineAsync()) != null)
+                {
+                    if (inHeader && line == "")
+                        inHeader = false;
+
+                    if (!inHeader && !verb.HasBody())
+                        break;
+
+                    if (inHeader)
+                    {
+                        var strsHeader = line.Split(":".ToCharArray(), 2);
+                        if (strsHeader.Length == 2)
+                            headers.Add(strsHeader[0], strsHeader[1].Trim());
+                    }
+                }
+
+                string tempStr;
+                long contentLength = -1;
+                if (headers.TryGetValue("Content-Length", out tempStr))
+                    if (!long.TryParse(tempStr, out contentLength))
+                        contentLength = -1;
+
+                var buffer = new byte[4096];
+                var remaining = contentLength < 0 ? long.MaxValue : contentLength;
+                var dateLastReceived = DateTime.UtcNow;
+                while (remaining > 0 || contentLength < 0)
+                {
+                    var cnt = await stream.ReadAsync(buffer, 0, Math.Min((int)Math.Min(remaining, int.MaxValue), buffer.Length));
+                    remaining -= cnt;
+                    if (cnt == 0 && contentLength == -1)
+                    {
+                        if (DateTime.UtcNow - dateLastReceived > TimeSpan.FromSeconds(5))
+                            break;
+                    }
+                    else
+                        dateLastReceived = DateTime.UtcNow;
+                }
+            }
+
+            MessageBox.Show("Data received:\n" + line0, "Result", MessageBoxButtons.OK);
         }
 
         [DllImport("kernel32.dll", ExactSpelling = true)]

@@ -45,6 +45,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="JetBrains.Annotations.cs" />
+    <Compile Include="MakeRequestForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="MakeRequestForm.Designer.cs">
+      <DependentUpon>MakeRequestForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="MyHttpServer.cs" />
     <Compile Include="HttpVerbs.cs" />
     <Compile Include="HttpVerbsExtensions.cs" />
@@ -55,6 +61,7 @@
     <Compile Include="Resources.cs" />
     <Compile Include="SocketAwaitable.cs" />
     <Compile Include="SocketExtensions.cs" />
+    <Compile Include="InterceptorStream.cs" />
     <Compile Include="StreamWriterExtensions.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -62,6 +69,9 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="console.ico" />
+    <EmbeddedResource Include="MakeRequestForm.resx">
+      <DependentUpon>MakeRequestForm.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
