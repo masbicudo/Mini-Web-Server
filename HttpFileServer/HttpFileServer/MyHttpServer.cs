@@ -287,6 +287,12 @@ namespace HttpFileServer
                             if (iconSize != 0)
                             {
                             REPEAT:
+                                // ExtractAssociatedIcon has a bug
+                                //  When reading the file icon, it may return incorrect icons in the first tries.
+                                //  This happens only for the first reads.
+                                //  To fix this, we try to read the icon multiple times,
+                                //  for a defined period of time, or while the wrong icon is returned.
+                                //  After 10 seconds, if the icon is still wrong, we change opinion and assume it is correct.
                                 var icon = Icon.ExtractAssociatedIcon(fileFullName.Replace("/", "\\"));
                                 if (this.dateFirstIcon == null || DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(2))
                                 {
