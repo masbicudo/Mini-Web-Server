@@ -383,7 +383,11 @@ namespace HttpFileServer
 
                 var path = Environment.CurrentDirectory;
 #if DEBUG
-                path = @"c:\Profile - MASB\Desktop\Scripts";
+                // ReSharper disable once AccessToModifiedClosure
+                path = path.Substring(
+                    0,
+                    path.IndexOf("\\bin", StringComparison.Ordinal)
+                        .With(x => x < 0 ? path.Length : x));
 #endif
                 return path;
             }
