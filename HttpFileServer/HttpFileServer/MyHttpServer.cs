@@ -150,6 +150,10 @@ namespace HttpFileServer
         private string host;
 
         DateTime? dateFirstIcon = null;
+
+        private int serializer = 0;
+        public bool SerializeResponses { get; set; }
+
         private async Task HandleClient(TcpClient tcpClient)
         {
             //// Reusable SocketAsyncEventArgs and awaitable wrapper
@@ -159,6 +163,10 @@ namespace HttpFileServer
 
             try
             {
+                if (this.SerializeResponses)
+                    while (Interlocked.CompareExchange(ref this.serializer, 1, 0) != 0)
+                        await Task.Delay(1);
+
                 var clientEndPoint = tcpClient.Client.LocalEndPoint as IPEndPoint;
 
                 var stream = tcpClient.GetStream();
@@ -369,6 +377,12 @@ namespace HttpFileServer
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("Exception in HandleClient: " + exe.Message);
+            }
+            finally
+            {
+                if (this.SerializeResponses)
+                    while (Interlocked.CompareExchange(ref this.serializer, 0, 1) != 1)
+                        throw new Exception("Lock broken!");
             }
         }
 

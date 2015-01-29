@@ -56,7 +56,12 @@ namespace HttpFileServer
             var appSettings_Host = ConfigurationManager.AppSettings["host"];
             var appSettings_Port = ConfigurationManager.AppSettings["port"];
 
-            server = new MyHttpServer();
+            server = new MyHttpServer
+                {
+#if DEBUG
+                    SerializeResponses = true,
+#endif
+                };
 
             usedHost = string.IsNullOrWhiteSpace(appSettings_Host)
                            ? "localhost"
