@@ -169,7 +169,7 @@ namespace HttpFileServer
                 File.Open("read-log", FileMode.Create, FileAccess.Write),
                 File.Open("write-log", FileMode.Create, FileAccess.Write)
                 ))
-            using (var reader = new myStreamReader(stream, Encoding.ASCII))
+            using (var reader = new MyStreamReader(stream, Encoding.ASCII))
             using (var writer = new StreamWriter(stream, Encoding.ASCII))
             {
                 // Sending GET request
