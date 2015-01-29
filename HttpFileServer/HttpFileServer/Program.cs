@@ -194,7 +194,7 @@ namespace HttpFileServer
 
                 if (line == null)
                 {
-                    MessageBox.Show("Request returned nothing.");
+                    MessageBox.Show("Request returned nothing.", "Result", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -254,7 +254,7 @@ namespace HttpFileServer
                 }
             }
 
-            MessageBox.Show("Data received:\n" + line0, "Result", MessageBoxButtons.OK);
+            MessageBox.Show("Data received:\n" + line0, "Result", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
         }
 
         [DllImport("kernel32.dll", ExactSpelling = true)]
