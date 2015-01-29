@@ -44,6 +44,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="JetBrains.Annotations.cs" />
     <Compile Include="MyHttpServer.cs" />
     <Compile Include="HttpVerbs.cs" />
     <Compile Include="HttpVerbsExtensions.cs" />
