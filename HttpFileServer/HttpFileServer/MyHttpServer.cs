@@ -146,6 +146,7 @@ namespace HttpFileServer
         private string basePath;
         private string host;
 
+        DateTime? dateFirstIcon = null;
         private async Task HandleClient(TcpClient tcpClient)
         {
             //// Reusable SocketAsyncEventArgs and awaitable wrapper
@@ -268,12 +269,29 @@ namespace HttpFileServer
                     {
                         if (File.Exists(fileFullName))
                         {
-                            var queryItems = uri.Query.TrimStart('?').Split('&').Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
-                            var iconSize = queryItems.Where(x => x[0] == "icon").Select(x => int.Parse(x[1])).FirstOrDefault();
+                            var queryItems =
+                                uri.Query.TrimStart('?').Split('&').Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
+                            var iconSize =
+                                queryItems.Where(x => x[0] == "icon").Select(x => int.Parse(x[1])).FirstOrDefault();
                             if (iconSize != 0)
                             {
+                            REPEAT:
                                 var icon = Icon.ExtractAssociatedIcon(fileFullName.Replace("/", "\\"));
+                                if (this.dateFirstIcon == null || DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(2))
+                                {
+                                    this.dateFirstIcon = this.dateFirstIcon ?? DateTime.UtcNow;
+                                    while (DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(2))
+                                        await Task.Delay(500);
+                                }
+
                                 fileBytes = IconAsSizedPng(icon, iconSize);
+                                if (this.dateFirstIcon == null || fileBytes.Length == 1092
+                                    && DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(10))
+                                {
+                                    this.dateFirstIcon = DateTime.UtcNow;
+                                    goto REPEAT;
+                                }
+
                                 contentType = "image/png";
                             }
                             else
