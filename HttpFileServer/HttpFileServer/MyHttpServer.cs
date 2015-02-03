@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -15,7 +16,7 @@ using System.Xml.Schema;
 
 namespace HttpFileServer
 {
-    public class MyHttpServer
+    public class MyHttpServer : ISite
     {
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
 
@@ -34,7 +35,8 @@ namespace HttpFileServer
             if (host == null)
                 throw new ArgumentNullException("host");
 
-            this.thread = new Thread(() =>
+            this.thread = new Thread(
+                () =>
                 {
                     this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
                     this.tcpListenerIPv4.Start();
@@ -135,24 +137,28 @@ namespace HttpFileServer
         }
 
         private static readonly Regex line1Regex = new Regex(@"^(GET|POST|DELETE|HEAD|PUT)(?=\s) ([^ ]*) (.*)$");
-        private static readonly Dictionary<string, HttpVerbs> dicVerbToEnum = new Dictionary<string, HttpVerbs>(StringComparer.InvariantCultureIgnoreCase)
-            {
-                { "DELETE", HttpVerbs.Delete },
-                { "GET", HttpVerbs.Get },
-                { "HEAD", HttpVerbs.Head },
-                { "OPTIONS", HttpVerbs.Options },
-                { "PATCH", HttpVerbs.Patch },
-                { "POST", HttpVerbs.Post },
-                { "PUT", HttpVerbs.Put },
-            };
+
+        private static readonly Dictionary<string, HttpVerbs> dicVerbToEnum =
+            new Dictionary<string, HttpVerbs>(StringComparer.InvariantCultureIgnoreCase)
+                {
+                    { "DELETE", HttpVerbs.Delete },
+                    { "GET", HttpVerbs.Get },
+                    { "HEAD", HttpVerbs.Head },
+                    { "OPTIONS", HttpVerbs.Options },
+                    { "PATCH", HttpVerbs.Patch },
+                    { "POST", HttpVerbs.Post },
+                    { "PUT", HttpVerbs.Put },
+                };
 
         private string basePath;
         private string host;
 
-        DateTime? dateFirstIcon = null;
+        private DateTime? dateFirstIcon = null;
 
         private int serializer = 0;
         public bool SerializeResponses { get; set; }
+
+        private ConcurrentDictionary<string, Type> fileCompiledTypes = new ConcurrentDictionary<string, Type>();
 
         private async Task HandleClient(TcpClient tcpClient)
         {
@@ -270,118 +276,65 @@ namespace HttpFileServer
 
 
                     // SENDING RESPONSE
-                    var basePath = BasePath;
-                    var fileFullName = Path.Combine(basePath, uri.LocalPath.TrimStart('/'));
-                    DateTime? fileDate = null;
-                    try
-                    {
-                        fileDate = File.GetLastWriteTimeUtc(fileFullName);
-                    }
-                    catch
-                    {
-                    }
-
                     string contentType = null;
-                    byte[] fileBytes = null;
+                    byte[] responseBytes = null;
                     Exception ex = null;
                     try
                     {
-                        if (File.Exists(fileFullName))
-                        {
-                            var queryItems =
-                                uri.Query.TrimStart('?').Split('&').Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
-                            var iconSize =
-                                queryItems.Where(x => x[0] == "icon").Select(x => int.Parse(x[1])).FirstOrDefault();
-                            if (iconSize != 0)
+                        var context = new HttpContext(uri.ToString(), headers, stream, this);
+                        var handlers = new HttpResquestHandler[]
                             {
-                            REPEAT:
-                                // ExtractAssociatedIcon has a bug
-                                //  When reading the file icon, it may return incorrect icons in the first tries.
-                                //  This happens only for the first reads.
-                                //  To fix this, we try to read the icon multiple times,
-                                //  for a defined period of time, or while the wrong icon is returned.
-                                //  After 10 seconds, if the icon is still wrong, we change opinion and assume it is correct.
-                                var icon = Icon.ExtractAssociatedIcon(fileFullName.Replace("/", "\\"));
-                                if (this.dateFirstIcon == null || DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(2))
-                                {
-                                    this.dateFirstIcon = this.dateFirstIcon ?? DateTime.UtcNow;
-                                    await Task.Delay(2000);
-                                    goto REPEAT;
-                                }
+                                new FileIconHandler(), 
+                                new ScriptFileHandler(),
+                                new FileBytesHandler(),
+                                new DirectoryHandler(),
+                            };
 
-                                fileBytes = IconAsSizedPng(icon, iconSize);
-                                if (fileBytes.Length == 1092 && DateTime.UtcNow < this.dateFirstIcon.Value.AddSeconds(10))
-                                {
-                                    await Task.Delay(1000);
-                                    goto REPEAT;
-                                }
+                        foreach (var handler in handlers)
+                        {
+                            await handler.RespondAsync(context);
+                            if (context.handled)
+                                return;
+                        }
 
-                                contentType = "image/png";
-                            }
-                            else
-                            {
-                                fileBytes = File.ReadAllBytes(fileFullName);
-                                contentType = MimeUtils.GetMimeType(Path.GetExtension(fileFullName));
-                            }
-                        }
-                        else if (Directory.Exists(fileFullName))
-                        {
-                            var queryItems = uri.Query.TrimStart('?').Split('&').Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
-                            var iconSize = queryItems.Where(x => x[0] == "icon").Select(x => int.Parse(x[1])).FirstOrDefault();
-                            if (iconSize != 0)
-                            {
-                                fileBytes = Res.GetFolderIconPng();
-                                contentType = "image/png";
-                            }
-                            else
-                            {
-                                fileBytes = GetDirectoryBytes(fileFullName, uri);
-                                contentType = MimeUtils.GetMimeType("html");
-                                contentType += "; charset=utf-8";
-                            }
-                        }
-                        else
-                        {
-                            fileBytes = GetNotFoundBytes(uri);
-                            contentType = MimeUtils.GetMimeType("html");
-                            contentType += "; charset=utf-8";
-                        }
+                        responseBytes = GetNotFoundBytes(uri);
+                        contentType = MimeUtils.GetMimeType("html");
+                        contentType += "; charset=utf-8";
                     }
                     catch (Exception ex1)
                     {
                         ex = ex1;
                     }
 
-                    if (ex != null || fileBytes == null)
-                    {
-                        fileBytes = GetErrorBytes(ex);
-                        contentType = MimeUtils.GetMimeType("html");
-                        contentType += "; charset=utf-8";
-                    }
-
                     if (ex != null)
                     {
-                        await writer.WriteHttpHeaderAsync("HTTP/1.1 404 Not Found");
+                        responseBytes = GetErrorBytes(ex);
+                        contentType = MimeUtils.GetMimeType("html");
+                        contentType += "; charset=utf-8";
+                        await writer.WriteHttpHeaderAsync("HTTP/1.1 500 Internal server error");
                     }
-                    else
+                    else if (responseBytes == null)
                     {
-                        await writer.WriteHttpHeaderAsync("HTTP/1.1 200 OK");
+                        responseBytes = GetNotFoundBytes(uri);
+                        contentType = MimeUtils.GetMimeType("html");
+                        contentType += "; charset=utf-8";
+                        await writer.WriteHttpHeaderAsync("HTTP/1.1 404 Not found");
                     }
+
+                    if (responseBytes == null)
+                        return;
 
                     await writer.WriteHttpHeaderAsync("Date", DateTime.UtcNow.ToString("R"));
                     await writer.WriteHttpHeaderAsync("Server", "Mini-Http-Server");
-                    //await writer.WriteLineAsync(@"ETag: ""51142bc1-7449-479b075b2891b""");
                     await writer.WriteHttpHeaderAsync("Accept-Ranges", "bytes");
-                    await writer.WriteHttpHeaderAsync("Content-Length", "" + fileBytes.Length);
+                    await writer.WriteHttpHeaderAsync("Content-Length", "" + responseBytes.Length);
                     await writer.WriteHttpHeaderAsync("Content-Type", contentType);
-                    await writer.WriteHttpHeaderAsync("Last-Modified", (fileDate ?? DateTime.UtcNow).ToString("R"));
+                    await writer.WriteHttpHeaderAsync("Last-Modified", DateTime.UtcNow.ToString("R"));
                     await writer.WriteHttpHeaderAsync("");
                     await writer.FlushAsync();
 
-                    await stream.WriteAsync(fileBytes, 0, fileBytes.Length);
+                    await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
                 }
-
-                tcpClient.Close();
             }
             catch (Exception exe)
             {
@@ -390,6 +343,8 @@ namespace HttpFileServer
             }
             finally
             {
+                tcpClient.Close();
+
                 if (this.SerializeResponses)
                     while (Interlocked.CompareExchange(ref this.serializer, 0, 1) != 1)
                         throw new Exception("Lock broken!");
@@ -416,26 +371,7 @@ namespace HttpFileServer
                 return path;
             }
 
-            set
-            {
-                this.basePath = value;
-            }
-        }
-
-        private static byte[] IconAsSizedPng(Icon icon, int size)
-        {
-            icon = new Icon(icon, size, size);
-            using (icon)
-            {
-                using (var bmp = icon.ToBitmap())
-                {
-                    using (var ms = new MemoryStream())
-                    {
-                        bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                        return ms.ToArray();
-                    }
-                }
-            }
+            set { this.basePath = value; }
         }
 
         private static byte[] GetNotFoundBytes(Uri uri)
@@ -453,70 +389,6 @@ namespace HttpFileServer
 ".Replace("%FILE%", uri.LocalPath));
         }
 
-        private static byte[] GetDirectoryBytes(string dirFullName, Uri uri)
-        {
-            var dir = new DirectoryInfo(dirFullName);
-
-            var isRoot = uri.LocalPath == "" || uri.LocalPath == "/";
-
-            var str = @"<!DOCTYPE html>
-<html>
-    <head>
-        <title>Dir</title>
-        <style>
-            div.item {
-                font-family: monospace;
-                font-size: 16px;
-                margin: 8px;
-            }
-            div.item a > * {
-                vertical-align: middle;
-            }
-            div.item a > img {
-                margin-right: 8px;
-            }
-            div.item a.dir {
-            }
-            div.item a.file {
-            }
-        </style>
-    </head>
-    <body>
-        <h1>%DIR%</h1>
-        <p>%LIST%</p>
-    </body>
-</html>
-";
-
-            str = str.Replace("%DIR%", isRoot ? "Root" : dir.Name);
-
-            IEnumerable<string> linksList = new string[0];
-
-            if (!isRoot)
-                linksList = linksList.Concat(new[]
-                    {
-                        "<div class='item parent dir'><a href='" + Uri.EscapeUriString("..") + "'>" + ".." + "</a></div>"
-                    });
-
-            var currentPath = uri.LocalPath.TrimEnd('/');
-
-            linksList = linksList.Concat(
-                dir.GetDirectories().Select(
-                    sd => "<div class='item dir'><a href='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "'>"
-                        + "<img src='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "?icon=16" + "' width='16' height='16' />"
-                        + sd.Name + "</a></div>"));
-
-            linksList = linksList.Concat(
-                dir.GetFiles().Select(
-                    sd => "<div class='item file'><a href='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "'>"
-                        + "<img src='" + Uri.EscapeUriString(currentPath + '/' + sd.Name) + "?icon=16" + "' width='16' height='16' />"
-                        + sd.Name + "</a></div>"));
-
-            str = str.Replace("%LIST%", string.Join("\n", linksList));
-
-            return Encoding.UTF8.GetBytes(str);
-        }
-
         private static byte[] GetErrorBytes(Exception ex)
         {
             return Encoding.UTF8.GetBytes(@"<!DOCTYPE html>
@@ -530,6 +402,49 @@ namespace HttpFileServer
     </body>
 </html>
 ".Replace("%EX%", ex.GetType().Name).Replace("%ERR%", ex.Message));
+        }
+
+        ConcurrentDictionary<object, object> dicServerValues = new ConcurrentDictionary<object, object>();
+
+        public object this[object key]
+        {
+            get
+            {
+                object value;
+                return this.dicServerValues.TryGetValue(key, out value) ? value : null;
+            }
+
+            set
+            {
+                this.dicServerValues[key] = value;
+            }
+        }
+
+        public T GetOrAddValue<T>(object key, Func<MyHttpServer, T> func)
+        {
+            return (T)this.dicServerValues.GetOrAdd(key, k => func(this));
+        }
+
+        public IComponent Component
+        {
+            get { return null; }
+        }
+
+        public IContainer Container
+        {
+            get { return null; }
+        }
+
+        public bool DesignMode
+        {
+            get { return false; }
+        }
+
+        public string Name { get; set; }
+
+        public object GetService(Type serviceType)
+        {
+            throw new NotImplementedException();
         }
     }
 }

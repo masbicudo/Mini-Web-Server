@@ -47,6 +47,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CompilationHelper.cs" />
+    <Compile Include="DirectoryHandler.cs" />
+    <Compile Include="FileBytesHandler.cs" />
+    <Compile Include="FileIconHandler.cs" />
     <Compile Include="MyStreamReader.cs" />
     <Compile Include="JetBrains.Annotations.cs" />
     <Compile Include="MakeRequestForm.cs">
@@ -63,6 +67,10 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Resources.cs" />
+    <Compile Include="HttpContext.cs" />
+    <Compile Include="HttpResquestHandler.cs" />
+    <Content Include="Samples\Index.cs" />
+    <Compile Include="ScriptFileHandler.cs" />
     <Compile Include="SocketAwaitable.cs" />
     <Compile Include="SocketExtensions.cs" />
     <Compile Include="InterceptorStream.cs" />
