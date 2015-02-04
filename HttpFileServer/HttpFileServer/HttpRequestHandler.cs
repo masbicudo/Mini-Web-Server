@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace HttpFileServer
 {
-    public abstract class HttpResquestHandler
+    public abstract class HttpRequestHandler
     {
         /// <summary>
         /// Responds a request by writing to the output stream.

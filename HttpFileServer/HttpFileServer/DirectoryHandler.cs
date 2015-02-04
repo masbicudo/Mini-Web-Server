@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace HttpFileServer
 {
-    public class DirectoryHandler : HttpResquestHandler
+    public class DirectoryHandler : HttpRequestHandler
     {
         public override async Task RespondAsync(HttpContext context)
         {

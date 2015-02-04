@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace HttpFileServer
 {
-    public class ScriptFileHandler : HttpResquestHandler
+    public class ScriptFileHandler : HttpRequestHandler
     {
         private static readonly object fileSystemWatcherKey = new object();
         private static readonly object fileCompiledTypesKey = new object();
@@ -54,10 +54,10 @@ namespace HttpFileServer
 
                     return CompilationHelper.Compile(fileFullName)
                         .GetTypes()
-                        .Single(t => typeof(HttpResquestHandler).IsAssignableFrom(t));
+                        .Single(t => typeof(HttpRequestHandler).IsAssignableFrom(t));
                 });
 
-            var handler = (HttpResquestHandler)Activator.CreateInstance(type);
+            var handler = (HttpRequestHandler)Activator.CreateInstance(type);
 
             await handler.RespondAsync(context);
         }

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace HttpFileServer
 {
-    public class FileBytesHandler : HttpResquestHandler
+    public class FileBytesHandler : HttpRequestHandler
     {
         private static T TryCatch<T>(Func<T> fn, Func<Exception, T> err)
         {

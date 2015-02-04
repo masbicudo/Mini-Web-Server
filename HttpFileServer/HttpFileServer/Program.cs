@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -23,15 +24,153 @@ namespace HttpFileServer
         private static int usedPort;
         private static string usedHost;
         private static MyHttpServer server;
+        private static string rootPath;
 
+        [STAThread]
         static void Main(string[] args)
         {
+            var allArgs = string.Join(" ", args);
+
             InitCloseHandle();
             InitTrayIcon();
 
             Console.BufferWidth = 200;
 
+            SetRootPath(allArgs);
+#if DEBUG
+            // ReSharper disable once AccessToModifiedClosure
+            rootPath = rootPath.Substring(
+                0,
+                rootPath.IndexOf("\\bin\\Debug", StringComparison.Ordinal)
+                    .With(x => x < 0 ? rootPath.Length : x));
+#endif
             StartServer();
+
+            Application.Run();
+        }
+
+        private static void SetRootPath(string allArgs)
+        {
+            var matchHttpFile = Regex.Match(allArgs, @"^\s*""(?<FILE>[^""]+.http)""|(?<FILE>[^\s]+.http)");
+            rootPath = null;
+            if (matchHttpFile.Success)
+                rootPath = Path.GetDirectoryName(matchHttpFile.Groups["FILE"].Value);
+        }
+
+        static int? FirstInt(params object[] els)
+        {
+            foreach (var el in els)
+            {
+                if (el is int?)
+                    return (int?)el;
+
+                if (el != null && Regex.IsMatch(el.ToString(), @"^\d+"))
+                    return int.Parse(el.ToString(), CultureInfo.InvariantCulture);
+            }
+
+            return null;
+        }
+
+        static void WatcherDisposed(object sender, EventArgs e)
+        {
+        }
+
+        static void WatcherError(object sender, ErrorEventArgs e)
+        {
+        }
+
+        static void WatcherEvent(object sender, FileSystemEventArgs e)
+        {
+            StartServer();
+        }
+
+        private static void StartServer()
+        {
+            var execPath = rootPath ?? Environment.CurrentDirectory;
+            var conf = HttpFile.Read(Path.Combine(execPath, ".http"));
+
+            rootPath = conf != null && conf.HttpRoot != null ? Path.Combine(execPath, conf.HttpRoot) : execPath;
+
+            var watcher = new FileSystemWatcher(rootPath, "*.http");
+            watcher.Created += WatcherEvent;
+            watcher.Deleted += WatcherEvent;
+            watcher.Changed += WatcherEvent;
+            watcher.Renamed += WatcherEvent;
+            watcher.Error += WatcherError;
+            watcher.Disposed += WatcherDisposed;
+            watcher.IncludeSubdirectories = true;
+            watcher.EnableRaisingEvents = true;
+
+            ConfigurationManager.RefreshSection("appSettings");
+            var appSettings_Host = (conf == null ? null : conf.Host) ?? ConfigurationManager.AppSettings["host"];
+            var appSettings_Port = FirstInt(conf == null ? null : conf.Port, ConfigurationManager.AppSettings["port"]) ?? 12345;
+
+            var allTypes = AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes());
+
+            var handlersListDic = new ListDictionary<string, string>();
+            if (conf != null && conf.Handlers != null && conf.Handlers.Items != null)
+                foreach (var itemAction in conf.Handlers.Items)
+                {
+                    var rem = itemAction as HttpFile.ItemToRemove;
+                    if (rem != null)
+                    {
+                        handlersListDic.Remove(rem.Key);
+                        continue;
+                    }
+
+                    var add = itemAction as HttpFile.HandlerItemToAdd;
+                    if (add != null)
+                    {
+                        if (string.IsNullOrWhiteSpace(add.Key))
+                            handlersListDic.Add(add.Type);
+                        else
+                            handlersListDic.Add(add.Key, add.Type);
+                        continue;
+                    }
+                }
+
+            var handlers = handlersListDic.ToArray()
+                .Select(
+                    n => allTypes
+                        .Where(t => typeof(HttpRequestHandler).IsAssignableFrom(t))
+                        .Where(t => t.FullName == n.ToString(CultureInfo.InvariantCulture))
+                        .Select(t => (HttpRequestHandler)Activator.CreateInstance(t))
+                        .FirstOrDefault())
+                .Where(h => h != null)
+                .ToArray();
+
+            if (server != null)
+                server.Cancel(true);
+
+            server = new MyHttpServer
+                {
+                    Handlers = handlers.Length == 0 ? null : handlers,
+                    BasePath = rootPath,
+#if DEBUG
+                    SerializeResponses = conf == null ? true : conf.SerializeResponses,
+#else
+                    SerializeResponses = conf == null ? false : conf.SerializeResponses,
+#endif
+                };
+
+            var prevPort = usedPort;
+            var prevHost = usedHost;
+
+            usedHost = string.IsNullOrWhiteSpace(appSettings_Host)
+                           ? "localhost"
+                           : appSettings_Host;
+
+            usedPort = 0;
+            for (int it = 0; it < 100; it++)
+                try
+                {
+                    usedPort = appSettings_Port + it;
+                    server.Start(usedHost, usedPort);
+                    break;
+                }
+                catch
+                {
+                }
 
             TrayIcon.Text = string.Format("Serving {0}:{1}", usedHost, usedPort);
             TrayIcon.ShowBalloonTip(
@@ -42,44 +181,14 @@ namespace HttpFileServer
 
             var start = StringComparer.InvariantCultureIgnoreCase.Equals(
                 ConfigurationManager.AppSettings["start-browser"],
-                "TRUE");
+                "TRUE") || conf != null && conf.OnStart != null && !string.IsNullOrWhiteSpace(conf.OnStart.OpenInBrowser);
 
-            if (start)
+            bool allowOpenInBrowser = prevPort != usedPort || prevHost != usedHost;
+            if (start && allowOpenInBrowser)
             {
-                Process.Start(string.Format("http://{0}:{1}", usedHost, usedPort));
+                var addr = conf != null && conf.OnStart != null ? conf.OnStart.OpenInBrowser : null;
+                Process.Start(string.Format("http://{0}:{1}{2}", usedHost, usedPort, addr ?? "/"));
             }
-
-            Application.Run();
-        }
-
-        private static void StartServer()
-        {
-            ConfigurationManager.RefreshSection("appSettings");
-            var appSettings_Host = ConfigurationManager.AppSettings["host"];
-            var appSettings_Port = ConfigurationManager.AppSettings["port"];
-
-            server = new MyHttpServer
-                {
-#if DEBUG
-                    SerializeResponses = true,
-#endif
-                };
-
-            usedHost = string.IsNullOrWhiteSpace(appSettings_Host)
-                           ? "localhost"
-                           : appSettings_Host;
-
-            usedPort = 0;
-            for (int it = 0; it < 100; it++)
-                try
-                {
-                    usedPort = int.Parse(appSettings_Port) + it;
-                    server.Start(usedHost, usedPort);
-                    break;
-                }
-                catch
-                {
-                }
         }
 
         #region Tray Icon
@@ -103,12 +212,38 @@ namespace HttpFileServer
                     new ToolStripMenuItem("Open in browser", null, openInBrowser),
                     new ToolStripMenuItem("Make request", null, testRequest),
                     new ToolStripMenuItem("Restart", null, restart),
+                    new ToolStripMenuItem("Associate *.http files", null, assocHttp),
+                    new ToolStripMenuItem("Open .http file", null, openHttp),
                     new ToolStripMenuItem("Exit", null, smoothExit),
                 });
 
             TrayIcon.Visible = true;
 
             ShowWindow(ThisConsole, showWindow);
+        }
+
+        private static void assocHttp(object sender, EventArgs e)
+        {
+            FileAssociationHelper.SetAssociation(
+                ".http",
+                "Http_Server_File",
+                Application.ExecutablePath,
+                "Mini HTTP Server Starter");
+        }
+
+        private static void openHttp(object sender, EventArgs e)
+        {
+            var dialog = new OpenFileDialog
+                {
+                    CheckFileExists = true,
+                    DereferenceLinks = true,
+                    DefaultExt = "http",
+                };
+
+            dialog.ShowDialog();
+
+            SetRootPath(dialog.FileName);
+            StartServer();
         }
 
         private static void TrayIcon_Click(object sender, MouseEventArgs e)
@@ -301,5 +436,52 @@ namespace HttpFileServer
             return true;
         }
         #endregion
+    }
+
+    public class ListDictionary<TKey, TValue>
+    {
+        struct Item
+        {
+            public int index;
+            public TKey key;
+            public TValue value;
+        }
+
+        private readonly List<Item> list = new List<Item>();
+        private readonly Dictionary<TKey, Item> dictionary = new Dictionary<TKey, Item>();
+
+        public void Add(TKey key, TValue value)
+        {
+            Item item;
+            item.index = this.list.Count;
+            item.key = key;
+            item.value = value;
+            this.list.Add(item);
+            this.dictionary.Add(key, item);
+        }
+
+        public void Add(TValue value)
+        {
+            Item item;
+            item.index = this.list.Count;
+            item.key = default(TKey);
+            item.value = value;
+            this.list.Add(item);
+        }
+
+        public void Remove(TKey key)
+        {
+            Item item;
+            if (this.dictionary.TryGetValue(key, out item))
+            {
+                this.dictionary.Remove(key);
+                this.list.RemoveAt(item.index);
+            }
+        }
+
+        public TValue[] ToArray()
+        {
+            return this.list.Where(i => i.index >= 0).Select(i => i.value).ToArray();
+        }
     }
 }

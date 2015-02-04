@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace HttpFileServer
 {
-    public class FileIconHandler : HttpResquestHandler
+    public class FileIconHandler : HttpRequestHandler
     {
         private static object dateFirstIconKey = new object();
 

@@ -35,23 +35,23 @@ namespace HttpFileServer
             if (host == null)
                 throw new ArgumentNullException("host");
 
+            this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
+            this.tcpListenerIPv4.Start();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("IPv4 Server started!");
+
+            this.tcpListenerIPv6 = new TcpListener(IPAddress.IPv6Any, port);
+            this.tcpListenerIPv6.Start();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("IPv6 Server started!");
+
+            var taskIPv4 = this.ListeningToClientsIPv4();
+            var taskIPv6 = this.ListeningToClientsIPv6();
+            this.host = host;
+
             this.thread = new Thread(
                 () =>
                 {
-                    this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
-                    this.tcpListenerIPv4.Start();
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("IPv4 Server started!");
-
-                    this.tcpListenerIPv6 = new TcpListener(IPAddress.IPv6Any, port);
-                    this.tcpListenerIPv6.Start();
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("IPv6 Server started!");
-
-                    var taskIPv4 = this.ListeningToClientsIPv4();
-                    var taskIPv6 = this.ListeningToClientsIPv6();
-                    this.host = host;
-
                     try
                     {
                         Task.WaitAll(new[] { taskIPv4, taskIPv6 }, this.cancellation.Token);
@@ -158,7 +158,7 @@ namespace HttpFileServer
         private int serializer = 0;
         public bool SerializeResponses { get; set; }
 
-        private ConcurrentDictionary<string, Type> fileCompiledTypes = new ConcurrentDictionary<string, Type>();
+        public HttpRequestHandler[] Handlers { get; set; }
 
         private async Task HandleClient(TcpClient tcpClient)
         {
@@ -282,7 +282,7 @@ namespace HttpFileServer
                     try
                     {
                         var context = new HttpContext(uri.ToString(), headers, stream, this);
-                        var handlers = new HttpResquestHandler[]
+                        var handlers = this.Handlers ?? new HttpRequestHandler[]
                             {
                                 new FileIconHandler(), 
                                 new ScriptFileHandler(),
@@ -356,19 +356,9 @@ namespace HttpFileServer
             get
             {
                 if (this.basePath != null)
-                {
                     return this.basePath;
-                }
 
-                var path = Environment.CurrentDirectory;
-#if DEBUG
-                // ReSharper disable once AccessToModifiedClosure
-                path = path.Substring(
-                    0,
-                    path.IndexOf("\\bin", StringComparison.Ordinal)
-                        .With(x => x < 0 ? path.Length : x));
-#endif
-                return path;
+                return Environment.CurrentDirectory;
             }
 
             set { this.basePath = value; }
