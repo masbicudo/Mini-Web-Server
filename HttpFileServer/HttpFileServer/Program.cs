@@ -25,6 +25,7 @@ namespace HttpFileServer
         private static string usedHost;
         private static MyHttpServer server;
         private static string rootPath;
+        private static FileSystemWatcher watcher;
 
         [STAThread]
         static void Main(string[] args)
@@ -91,7 +92,17 @@ namespace HttpFileServer
 
             rootPath = conf != null && conf.HttpRoot != null ? Path.Combine(execPath, conf.HttpRoot) : execPath;
 
-            var watcher = new FileSystemWatcher(rootPath, "*.http");
+            if (watcher != null)
+            {
+                watcher.Created -= WatcherEvent;
+                watcher.Deleted -= WatcherEvent;
+                watcher.Changed -= WatcherEvent;
+                watcher.Renamed -= WatcherEvent;
+                watcher.Error -= WatcherError;
+                watcher.Disposed -= WatcherDisposed;
+            }
+
+            watcher = new FileSystemWatcher(rootPath, "*.http");
             watcher.Created += WatcherEvent;
             watcher.Deleted += WatcherEvent;
             watcher.Changed += WatcherEvent;
