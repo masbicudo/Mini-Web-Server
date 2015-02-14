@@ -25,97 +25,128 @@ namespace HttpFileServer
 
         public override async Task RespondAsync(HttpContext context)
         {
-            var start = "/*Meta/";
+            var startMeta = "/*Meta/";
+            var startDirIcon = "/*Res/DirIcon";
             var basePath = context.Server.BasePath;
             var localPath = context.Uri.LocalPath;
 
-            if (!localPath.StartsWith(start, StringComparison.InvariantCultureIgnoreCase))
-                return;
-
-            localPath = localPath.Substring(start.Length);
-
-            var fileFullName = Path.Combine(basePath, localPath);
-            var isFile = File.Exists(fileFullName);
-            var isDir = Directory.Exists(fileFullName);
-
-            if (!isFile && !isDir)
-                return;
-
-            var fileDate = TryCatch(() => File.GetLastWriteTimeUtc(fileFullName), e => (DateTime?)null);
-
-            if (!fileDate.HasValue)
+            bool isMeta = localPath.StartsWith(startMeta, StringComparison.InvariantCultureIgnoreCase);
+            bool isDirIcon = localPath.StartsWith(startDirIcon, StringComparison.InvariantCultureIgnoreCase);
+            if (!isMeta && !isDirIcon)
                 return;
 
             byte[] iconBytes = null;
             string contentType = null;
-            if (isFile)
+            string redirect = null;
+            //DateTime? fileDate = null;
+            bool cache = true;
+            if (isDirIcon)
             {
-                var queryItems = context.Uri.Query
-                    .TrimStart('?')
-                    .Split('&')
-                    .Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
+                var queryItems =
+                    context.Uri.Query.TrimStart('?').Split('&').Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
 
-                var iconSize = queryItems
-                    .Where(x => x[0] == "icon")
-                    .Select(x => int.Parse(x[1])).FirstOrDefault();
+                var iconSize =
+                    queryItems.Where(x => x[0] == "icon").Select(x => int.Parse(x[1])).FirstOrDefault();
 
                 if (iconSize != 0)
                 {
-                    REPEAT:
-                    // ExtractAssociatedIcon has a bug
-                    //  When reading the file icon, it may return incorrect icons in the first tries.
-                    //  This happens only for the first reads.
-                    //  To fix this, we try to read the icon multiple times,
-                    //  for a defined period of time, or while the wrong icon is returned.
-                    //  After 10 seconds, if the icon is still wrong, we change opinion and assume it is correct.
-                    var icon = Icon.ExtractAssociatedIcon(fileFullName.Replace("/", "\\"));
-                    var dateFirstIcon = context.Server[dateFirstIconKey] as DateTime?;
-                    if (dateFirstIcon == null
-                        || DateTime.UtcNow < dateFirstIcon.Value.AddSeconds(2))
-                    {
-                        context.Server[dateFirstIconKey] = dateFirstIcon ?? DateTime.UtcNow;
-                        await Task.Delay(2000);
-                        goto REPEAT;
-                    }
-
-                    iconBytes = IconAsSizedPng(icon, iconSize);
-                    if (iconBytes.Length == 1092
-                        && DateTime.UtcNow < dateFirstIcon.Value.AddSeconds(10))
-                    {
-                        await Task.Delay(1000);
-                        goto REPEAT;
-                    }
-
+                    //fileDate = new DateTime(2999, 1, 1);
+                    iconBytes = Res.GetFolderIconPng();
                     contentType = "image/png";
                 }
             }
             else
             {
-                // Should redirect to "//Res/DirIcon"
-                var queryItems =
-                    context.Uri.Query.TrimStart('?').Split('&').Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
-                var iconSize =
-                    queryItems.Where(x => x[0] == "icon").Select(x => int.Parse(x[1])).FirstOrDefault();
-                if (iconSize != 0)
+                localPath = localPath.Substring(startMeta.Length);
+
+                var fileFullName = Path.Combine(basePath, localPath);
+                var isFile = File.Exists(fileFullName);
+                var isDir = Directory.Exists(fileFullName);
+
+                if (!isFile && !isDir)
+                    return;
+
+                //fileDate = TryCatch(() => File.GetLastWriteTimeUtc(fileFullName), e => (DateTime?)null);
+
+                //if (!fileDate.HasValue)
+                //    return;
+
+                if (isFile)
                 {
-                    iconBytes = Res.GetFolderIconPng();
-                    contentType = "image/png";
+                    var queryItems = context.Uri.Query
+                        .TrimStart('?')
+                        .Split('&')
+                        .Select(x => x.Split("=".ToCharArray(), 2)).ToArray();
+
+                    var iconSize = queryItems
+                        .Where(x => x[0] == "icon")
+                        .Select(x => int.Parse(x[1])).FirstOrDefault();
+
+                    if (iconSize != 0)
+                    {
+                    REPEAT:
+                        // ExtractAssociatedIcon has a bug
+                        //  When reading the file icon, it may return incorrect icons in the first tries.
+                        //  This happens only for the first reads.
+                        //  To fix this, we try to read the icon multiple times,
+                        //  for a defined period of time, or while the wrong icon is returned.
+                        //  After 10 seconds, if the icon is still wrong, we change opinion and assume it is correct.
+                        var icon = Icon.ExtractAssociatedIcon(fileFullName.Replace("/", "\\"));
+                        var dateFirstIcon = context.Server[dateFirstIconKey] as DateTime?;
+                        if (dateFirstIcon == null
+                            || DateTime.UtcNow < dateFirstIcon.Value.AddSeconds(2))
+                        {
+                            context.Server[dateFirstIconKey] = dateFirstIcon ?? DateTime.UtcNow;
+                            await Task.Delay(2000);
+                            goto REPEAT;
+                        }
+
+                        iconBytes = IconAsSizedPng(icon, iconSize);
+                        if (iconBytes.Length == 1092
+                            && DateTime.UtcNow < dateFirstIcon.Value.AddSeconds(10))
+                        {
+                            await Task.Delay(1000);
+                            goto REPEAT;
+                        }
+
+                        contentType = "image/png";
+                    }
+                }
+                else
+                {
+                    // Should redirect to "/*Res/DirIcon"
+                    var uriBuilder = new UriBuilder(context.Uri);
+                    uriBuilder.Path = "/*Res/DirIcon";
+                    redirect = uriBuilder.ToString();
                 }
             }
-
-            if (iconBytes == null)
-                return;
 
             using (var writer = new StreamWriter(context.Output, Encoding.ASCII))
             {
                 // writing header
+                if (!string.IsNullOrWhiteSpace(redirect))
+                {
+                    await writer.WriteHttpHeaderAsync("HTTP/1.1 302 Found");
+                    await writer.WriteHttpHeaderAsync("Date", DateTime.UtcNow.ToString("R"));
+                    await writer.WriteHttpHeaderAsync("Server", "Mini-Http-Server");
+                    await writer.WriteHttpHeaderAsync("Location", redirect);
+                    await writer.WriteHttpHeaderAsync("");
+
+                    return;
+                }
+
+                if (iconBytes == null)
+                    return;
+
                 await writer.WriteHttpHeaderAsync("HTTP/1.1 200 OK");
                 await writer.WriteHttpHeaderAsync("Date", DateTime.UtcNow.ToString("R"));
                 await writer.WriteHttpHeaderAsync("Server", "Mini-Http-Server");
                 await writer.WriteHttpHeaderAsync("Accept-Ranges", "bytes");
                 await writer.WriteHttpHeaderAsync("Content-Length", "" + iconBytes.Length);
                 await writer.WriteHttpHeaderAsync("Content-Type", contentType);
-                await writer.WriteHttpHeaderAsync("Last-Modified", (fileDate ?? DateTime.UtcNow).ToString("R"));
+                await writer.WriteHttpHeaderAsync("Last-Modified", new DateTime(1970, 1, 1).ToString("R"));
+                await writer.WriteHttpHeaderAsync("Expires", new DateTime(2999, 1, 1).ToString("R"));
+
                 await writer.WriteHttpHeaderAsync("");
 
                 await writer.FlushAsync();
