@@ -55,6 +55,7 @@
     <Compile Include="DirectoryHandler.cs" />
     <Compile Include="FileBytesHandler.cs" />
     <Compile Include="FileIconHandler.cs" />
+    <Compile Include="ListDictionary.cs" />
     <Compile Include="MyStreamReader.cs" />
     <Compile Include="JetBrains.Annotations.cs" />
     <Compile Include="MakeRequestForm.cs">
