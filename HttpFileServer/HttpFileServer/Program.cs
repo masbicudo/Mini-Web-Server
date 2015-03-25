@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
@@ -27,10 +28,88 @@ namespace HttpFileServer
         private static string rootPath;
         private static FileSystemWatcher watcher;
 
+#if DEBUG
+        private static readonly bool DEBUG = true;
+#else
+        private static readonly bool DEBUG = false;
+#endif
+
         [STAThread]
         static void Main(string[] args)
         {
             var allArgs = string.Join(" ", args);
+            SetRootPath(allArgs);
+
+            Messages.Init();
+
+            string fileToOpen = "";
+
+            var answers = new ConcurrentQueue<Tuple<int, bool>>();
+
+            Messages.ReceiveString += (str) =>
+            {
+                var match1 = Regex.Match(str, @"^(?<PID>\d+)\: ARE YOU SERVING ""(?<PATH>[^""]*)""?$");
+                if (match1.Success)
+                {
+                    var path = match1.Groups["PATH"].Value;
+                    var procId = int.Parse(match1.Groups["PID"].Value);
+                    var proc = Process.GetProcessById(procId);
+                    path = path.EndsWith("\\") ? path : path + "\\";
+                    var myRoot = rootPath.StartsWith("\\") ? rootPath : rootPath + "\\";
+                    proc.SendString(
+                        myRoot.StartsWith(path, StringComparison.InvariantCultureIgnoreCase)
+                            ? string.Format("{0}: YES", procId)
+                            : string.Format("{0}: NO", procId));
+
+                    return;
+                }
+
+                var match2 = Regex.Match(str, @"^(?<PID>\d+)\: (?<ANS>YES|NO)$");
+                if (match2.Success)
+                {
+                    var procId = int.Parse(match2.Groups["PI"].Value);
+                    var ans = match2.Groups["ANS"].Value;
+                    answers.Enqueue(new Tuple<int, bool>(procId, ans == "YES"));
+                    return;
+                }
+            };
+
+            // sending messages to all processes, asking "Are you serving this folder already?"
+            foreach (var proc in Process.GetProcesses())
+            {
+                proc.SendString(
+                    string.Format(
+                        @"{0}: ARE YOU SERVING ""{1}""?",
+                        Process.GetCurrentProcess().Id,
+                        rootPath));
+            }
+
+            // waiting for answers
+            var waitStart = DateTime.UtcNow;
+            while (DateTime.UtcNow < waitStart.AddSeconds(DEBUG ? 10 : 0.1))
+            {
+                while (true)
+                {
+                    Tuple<int, bool> item;
+                    if (!answers.TryDequeue(out item))
+                        break;
+
+                    if (item.Item2)
+                    {
+                        if (string.IsNullOrWhiteSpace(fileToOpen))
+                            return;
+
+                        var proc = Process.GetProcessById(item.Item1);
+                        proc.SendString(
+                            string.Format(
+                                @"{0}: OPEN FILE ""{1}""",
+                                Process.GetCurrentProcess().Id,
+                                fileToOpen));
+                    }
+                }
+
+                Thread.Sleep(1);
+            }
 
             InitCloseHandle();
             InitTrayIcon();
@@ -46,6 +125,7 @@ namespace HttpFileServer
                 rootPath.IndexOf("\\bin\\Debug", StringComparison.Ordinal)
                     .With(x => x < 0 ? rootPath.Length : x));
 #endif
+
             StartServer();
 
             Application.Run();
@@ -57,6 +137,14 @@ namespace HttpFileServer
             rootPath = null;
             if (matchHttpFile.Success)
                 rootPath = Path.GetDirectoryName(matchHttpFile.Groups["FILE"].Value);
+#if DEBUG
+            // ReSharper disable once AccessToModifiedClosure
+            rootPath = rootPath ?? Environment.CurrentDirectory;
+            rootPath = rootPath.Substring(
+                0,
+                rootPath.IndexOf("\\bin\\Debug", StringComparison.Ordinal)
+                    .With(x => x < 0 ? rootPath.Length : x));
+#endif
         }
 
         static int? FirstInt(params object[] els)
@@ -448,52 +536,5 @@ namespace HttpFileServer
             return true;
         }
         #endregion
-    }
-
-    public class ListDictionary<TKey, TValue>
-    {
-        struct Item
-        {
-            public int index;
-            public TKey key;
-            public TValue value;
-        }
-
-        private readonly List<Item> list = new List<Item>();
-        private readonly Dictionary<TKey, Item> dictionary = new Dictionary<TKey, Item>();
-
-        public void Add(TKey key, TValue value)
-        {
-            Item item;
-            item.index = this.list.Count;
-            item.key = key;
-            item.value = value;
-            this.list.Add(item);
-            this.dictionary.Add(key, item);
-        }
-
-        public void Add(TValue value)
-        {
-            Item item;
-            item.index = this.list.Count;
-            item.key = default(TKey);
-            item.value = value;
-            this.list.Add(item);
-        }
-
-        public void Remove(TKey key)
-        {
-            Item item;
-            if (this.dictionary.TryGetValue(key, out item))
-            {
-                this.dictionary.Remove(key);
-                this.list.RemoveAt(item.index);
-            }
-        }
-
-        public TValue[] ToArray()
-        {
-            return this.list.Where(i => i.index >= 0).Select(i => i.value).ToArray();
-        }
     }
 }

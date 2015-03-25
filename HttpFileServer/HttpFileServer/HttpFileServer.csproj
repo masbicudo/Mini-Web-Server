@@ -48,12 +48,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ByteCountingStream.cs" />
+    <Compile Include="ArgsHelper.cs" />
+    <Compile Include="ArgType.cs" />
     <Compile Include="HttpFile.cs" />
     <Compile Include="FileAssociationHelper.cs" />
     <Compile Include="CompilationHelper.cs" />
     <Compile Include="DirectoryHandler.cs" />
     <Compile Include="FileBytesHandler.cs" />
     <Compile Include="FileIconHandler.cs" />
+    <Compile Include="ListDictionary.cs" />
+    <Compile Include="Messages.cs" />
     <Compile Include="MyStreamReader.cs" />
     <Compile Include="JetBrains.Annotations.cs" />
     <Compile Include="MakeRequestForm.cs">
