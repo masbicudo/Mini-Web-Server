@@ -25,5 +25,7 @@ public class Index : HttpRequestHandler
             // writing response body
             await writer.WriteLineAsync(msg);
         }
+
+        context.Handled();
     }
 }
