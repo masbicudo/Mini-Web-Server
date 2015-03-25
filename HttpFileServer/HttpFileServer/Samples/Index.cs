@@ -4,7 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using HttpFileServer;
 
-public class Index : HttpResquestHandler
+public class Index : HttpRequestHandler
 {
     public override async Task RespondAsync(HttpContext context)
     {

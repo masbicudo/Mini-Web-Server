@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using TGREER;
 
 namespace HttpFileServer
 {
@@ -172,114 +173,144 @@ namespace HttpFileServer
 
                 var clientEndPoint = tcpClient.Client.LocalEndPoint as IPEndPoint;
 
-                var stream = tcpClient.GetStream();
-                Console.ForegroundColor = ConsoleColor.Blue;
-                Console.WriteLine("Handling client");
-                using (var reader = new StreamReader(stream, Encoding.ASCII))
-                using (var writer = new StreamWriter(stream, Encoding.ASCII))
+                using (var stream = ByteCountingStream.Create(tcpClient.GetStream()))
                 {
-                    string line;
-
-                    line = reader.ReadLine();
-
-                    if (line == null)
+                    Console.ForegroundColor = ConsoleColor.Blue;
+                    Console.WriteLine("Handling client");
+                    using (var reader = new MyStreamReader(stream, Encoding.ASCII))
+                    using (var writer = new StreamWriter(stream, Encoding.ASCII))
                     {
-                        var oldColor = Console.ForegroundColor;
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Null request first line");
-                        Console.ForegroundColor = oldColor;
-                    }
+                        string line;
 
-                    HttpVerbs verb = 0;
-                    string path = null;
-                    string protocol = null;
-                    {
-                        var match = line1Regex.Match(line);
-                        if (match.Success)
+                        line = reader.ReadLine();
+
+                        if (line == null)
                         {
-                            if (!dicVerbToEnum.TryGetValue(match.Groups[1].Value, out verb))
-                                throw new Exception("Invalid HTTP verb.");
-
-                            path = match.Groups[2].Value;
-
-                            protocol = match.Groups[3].Value;
+                            var oldColor = Console.ForegroundColor;
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Null request first line");
+                            Console.ForegroundColor = oldColor;
                         }
-                    }
 
-                    var headers = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
-                    bool inHeader = true;
-                    while ((line = await reader.ReadLineAsync()) != null)
-                    {
-                        if (inHeader && line == "")
-                            inHeader = false;
-
-                        if (!inHeader && !verb.HasBody())
-                            break;
-
-                        if (inHeader)
+                        HttpVerbs verb = 0;
+                        string path = null;
+                        string protocol = null;
                         {
-                            var strsHeader = line.Split(":".ToCharArray(), 2);
-                            if (strsHeader.Length == 2)
-                                headers.Add(strsHeader[0], strsHeader[1].Trim());
+                            var match = line1Regex.Match(line);
+                            if (match.Success)
+                            {
+                                if (!dicVerbToEnum.TryGetValue(match.Groups[1].Value, out verb))
+                                    throw new Exception("Invalid HTTP verb.");
+
+                                path = match.Groups[2].Value;
+
+                                protocol = match.Groups[3].Value;
+                            }
                         }
-                    }
 
-                    string host;
-                    int port;
-                    {
-                        string hostAndPort;
-                        if (headers.TryGetValue("host", out hostAndPort))
+                        var headers = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
+                        bool inHeader = true;
+                        while ((line = await reader.ReadLineAsync()) != null)
                         {
-                            var split = hostAndPort.Split(":".ToCharArray(), 2);
-                            host = split[0];
-                            if (split.Length == 2)
-                                int.TryParse(split[1], out port);
+                            if (inHeader && line == "")
+                                inHeader = false;
+
+                            if (!inHeader)
+                                break;
+
+                            if (inHeader)
+                            {
+                                var strsHeader = line.Split(":".ToCharArray(), 2);
+                                if (strsHeader.Length == 2)
+                                    headers.Add(strsHeader[0], strsHeader[1].Trim());
+                            }
+                        }
+
+                        if (verb.HasBody())
+                        {
+                            // reading the body of the request
+                            string tempStr;
+                            long contentLength = -1;
+                            if (headers.TryGetValue("Content-Length", out tempStr))
+                                if (!long.TryParse(tempStr, out contentLength))
+                                    contentLength = -1;
+
+                            var readNetPos = stream.ReadCount;
+                            var readStrPos = reader.BytesRead;
+
+                            var buffer = new byte[4096];
+                            var remaining = (contentLength < 0 ? long.MaxValue : contentLength) - (readNetPos - readStrPos);
+                            var dateLastReceived = DateTime.UtcNow;
+                            while (remaining > 0 || contentLength < 0)
+                            {
+                                var cnt = await stream.ReadAsync(buffer, 0, Math.Min((int)Math.Min(remaining, int.MaxValue), buffer.Length));
+                                remaining -= cnt;
+                                if (cnt == 0 && contentLength == -1)
+                                {
+                                    if (DateTime.UtcNow - dateLastReceived > TimeSpan.FromSeconds(5))
+                                        break;
+                                }
+                                else
+                                    dateLastReceived = DateTime.UtcNow;
+                            }
+                        }
+
+                        string host;
+                        int port;
+                        {
+                            string hostAndPort;
+                            if (headers.TryGetValue("host", out hostAndPort))
+                            {
+                                var split = hostAndPort.Split(":".ToCharArray(), 2);
+                                host = split[0];
+                                if (split.Length == 2)
+                                    int.TryParse(split[1], out port);
+                                else
+                                    port = 80;
+                            }
                             else
-                                port = 80;
+                            {
+                                host = clientEndPoint.Address.ToString();
+                                port = clientEndPoint.Port;
+                            }
                         }
-                        else
+
+                        if (host != this.host)
+                            throw new Exception("Cannot accept host: " + host);
+
+                        string pathNoQuery;
+                        string query = null;
                         {
-                            host = clientEndPoint.Address.ToString();
-                            port = clientEndPoint.Port;
+                            var pos = path.IndexOf('?');
+                            if (pos >= 0)
+                            {
+                                pathNoQuery = path.Substring(0, pos);
+                                query = path.Substring(pos);
+                            }
+                            else
+                            {
+                                pathNoQuery = path;
+                            }
                         }
-                    }
 
-                    if (host != this.host)
-                        throw new Exception("Cannot accept host: " + host);
+                        var uri = new UriBuilder("http", host, port, pathNoQuery, query).Uri;
 
-                    string pathNoQuery;
-                    string query = null;
-                    {
-                        var pos = path.IndexOf('?');
-                        if (pos >= 0)
+                        Console.ForegroundColor = ConsoleColor.Gray;
+                        Console.WriteLine(uri);
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("" + verb.ToString().ToUpperInvariant() + " " + path + " " + protocol);
+                        Console.ForegroundColor = ConsoleColor.White;
+                        Console.WriteLine(string.Join("\n", headers.Select(kv => kv.Key + ": " + kv.Value)));
+
+
+                        // SENDING RESPONSE
+                        string contentType = null;
+                        byte[] responseBytes = null;
+                        Exception ex = null;
+                        try
                         {
-                            pathNoQuery = path.Substring(0, pos);
-                            query = path.Substring(pos);
-                        }
-                        else
-                        {
-                            pathNoQuery = path;
-                        }
-                    }
-
-                    var uri = new UriBuilder("http", host, port, pathNoQuery, query).Uri;
-
-                    Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.WriteLine(uri);
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("" + verb.ToString().ToUpperInvariant() + " " + path + " " + protocol);
-                    Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine(string.Join("\n", headers.Select(kv => kv.Key + ": " + kv.Value)));
-
-
-                    // SENDING RESPONSE
-                    string contentType = null;
-                    byte[] responseBytes = null;
-                    Exception ex = null;
-                    try
-                    {
-                        var context = new HttpContext(uri.ToString(), headers, stream, this);
-                        var handlers = this.Handlers ?? new HttpRequestHandler[]
+                            var context = new HttpContext(uri.ToString(), headers, stream, this);
+                            var handlers = this.Handlers ?? new HttpRequestHandler[]
                             {
                                 new FileIconHandler(), 
                                 new ScriptFileHandler(),
@@ -287,50 +318,51 @@ namespace HttpFileServer
                                 new DirectoryHandler(),
                             };
 
-                        foreach (var handler in handlers)
+                            foreach (var handler in handlers)
+                            {
+                                await handler.RespondAsync(context);
+                                if (context.handled)
+                                    return;
+                            }
+
+                            responseBytes = GetNotFoundBytes(uri);
+                            contentType = MimeUtils.GetMimeType("html");
+                            contentType += "; charset=utf-8";
+                        }
+                        catch (Exception ex1)
                         {
-                            await handler.RespondAsync(context);
-                            if (context.handled)
-                                return;
+                            ex = ex1;
                         }
 
-                        responseBytes = GetNotFoundBytes(uri);
-                        contentType = MimeUtils.GetMimeType("html");
-                        contentType += "; charset=utf-8";
-                    }
-                    catch (Exception ex1)
-                    {
-                        ex = ex1;
-                    }
+                        if (ex != null)
+                        {
+                            responseBytes = GetErrorBytes(ex);
+                            contentType = MimeUtils.GetMimeType("html");
+                            contentType += "; charset=utf-8";
+                            await writer.WriteHttpHeaderAsync("HTTP/1.1 500 Internal server error");
+                        }
+                        else if (responseBytes == null)
+                        {
+                            responseBytes = GetNotFoundBytes(uri);
+                            contentType = MimeUtils.GetMimeType("html");
+                            contentType += "; charset=utf-8";
+                            await writer.WriteHttpHeaderAsync("HTTP/1.1 404 Not found");
+                        }
 
-                    if (ex != null)
-                    {
-                        responseBytes = GetErrorBytes(ex);
-                        contentType = MimeUtils.GetMimeType("html");
-                        contentType += "; charset=utf-8";
-                        await writer.WriteHttpHeaderAsync("HTTP/1.1 500 Internal server error");
+                        if (responseBytes == null)
+                            return;
+
+                        await writer.WriteHttpHeaderAsync("Date", DateTime.UtcNow.ToString("R"));
+                        await writer.WriteHttpHeaderAsync("Server", "Mini-Http-Server");
+                        await writer.WriteHttpHeaderAsync("Accept-Ranges", "bytes");
+                        await writer.WriteHttpHeaderAsync("Content-Length", "" + responseBytes.Length);
+                        await writer.WriteHttpHeaderAsync("Content-Type", contentType);
+                        await writer.WriteHttpHeaderAsync("Last-Modified", DateTime.UtcNow.ToString("R"));
+                        await writer.WriteHttpHeaderAsync("");
+                        await writer.FlushAsync();
+
+                        await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
                     }
-                    else if (responseBytes == null)
-                    {
-                        responseBytes = GetNotFoundBytes(uri);
-                        contentType = MimeUtils.GetMimeType("html");
-                        contentType += "; charset=utf-8";
-                        await writer.WriteHttpHeaderAsync("HTTP/1.1 404 Not found");
-                    }
-
-                    if (responseBytes == null)
-                        return;
-
-                    await writer.WriteHttpHeaderAsync("Date", DateTime.UtcNow.ToString("R"));
-                    await writer.WriteHttpHeaderAsync("Server", "Mini-Http-Server");
-                    await writer.WriteHttpHeaderAsync("Accept-Ranges", "bytes");
-                    await writer.WriteHttpHeaderAsync("Content-Length", "" + responseBytes.Length);
-                    await writer.WriteHttpHeaderAsync("Content-Type", contentType);
-                    await writer.WriteHttpHeaderAsync("Last-Modified", DateTime.UtcNow.ToString("R"));
-                    await writer.WriteHttpHeaderAsync("");
-                    await writer.FlushAsync();
-
-                    await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
                 }
             }
             catch (Exception exe)

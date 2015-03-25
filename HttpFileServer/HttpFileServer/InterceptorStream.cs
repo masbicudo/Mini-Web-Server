@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
@@ -38,6 +37,7 @@ namespace HttpFileServer
             get { return this.readLog.OfType<TStreamReadLog>(); }
         }
     }
+
     public class InterceptorStream<TStreamInner, TLogStream> : InterceptorStream
         where TStreamInner : Stream
         where TLogStream : Stream
@@ -47,6 +47,7 @@ namespace HttpFileServer
         {
         }
     }
+
     public class InterceptorStream : Stream
     {
         protected readonly Stream inner;

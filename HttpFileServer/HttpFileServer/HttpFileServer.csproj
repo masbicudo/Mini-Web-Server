@@ -47,6 +47,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ByteCountingStream.cs" />
     <Compile Include="HttpFile.cs" />
     <Compile Include="FileAssociationHelper.cs" />
     <Compile Include="CompilationHelper.cs" />

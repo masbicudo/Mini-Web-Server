@@ -40,6 +40,7 @@ namespace HttpFileServer
             SetRootPath(allArgs);
 #if DEBUG
             // ReSharper disable once AccessToModifiedClosure
+            rootPath = rootPath ?? Environment.CurrentDirectory;
             rootPath = rootPath.Substring(
                 0,
                 rootPath.IndexOf("\\bin\\Debug", StringComparison.Ordinal)

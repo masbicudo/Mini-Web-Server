@@ -31,14 +31,14 @@ namespace HttpFileServer
                         TreatWarningsAsErrors = false,
                         ReferencedAssemblies =
                             {
-                                //"System.dll",
-                                //"System.Configuration.dll",
-                                //"System.Core.dll",
-                                //"System.Data.dll",
-                                //"System.Data.DataSetExtensions.dll",
-                                //"System.Drawing.dll",
-                                //"System.Xml.dll",
-                                //"System.Xml.Linq.dll",
+                                "System.dll",
+                                "System.Configuration.dll",
+                                "System.Core.dll",
+                                "System.Data.dll",
+                                "System.Data.DataSetExtensions.dll",
+                                "System.Drawing.dll",
+                                "System.Xml.dll",
+                                "System.Xml.Linq.dll",
                                 Assembly.GetAssembly(typeof(MyHttpServer)).CodeBase.Replace("file:///", ""),
                             }
                     };
