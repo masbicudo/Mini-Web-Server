@@ -116,16 +116,6 @@ namespace HttpFileServer
 
             Console.BufferWidth = 200;
 
-            SetRootPath(allArgs);
-#if DEBUG
-            // ReSharper disable once AccessToModifiedClosure
-            rootPath = rootPath ?? Environment.CurrentDirectory;
-            rootPath = rootPath.Substring(
-                0,
-                rootPath.IndexOf("\\bin\\Debug", StringComparison.Ordinal)
-                    .With(x => x < 0 ? rootPath.Length : x));
-#endif
-
             StartServer();
 
             Application.Run();
