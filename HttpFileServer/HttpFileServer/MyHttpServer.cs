@@ -302,6 +302,8 @@ namespace HttpFileServer
                         Console.ForegroundColor = ConsoleColor.White;
                         Console.WriteLine(string.Join("\n", headers.Select(kv => kv.Key + ": " + kv.Value)));
 
+                        Console.ForegroundColor = ConsoleColor.DarkGreen;
+                        Console.WriteLine("SENDING RESPONSE");
 
                         // SENDING RESPONSE
                         string contentType = null;
@@ -320,10 +322,23 @@ namespace HttpFileServer
 
                             foreach (var handler in handlers)
                             {
+                                Console.ForegroundColor = ConsoleColor.DarkGreen;
+                                Console.WriteLine("Trying Handler: " + handler.GetType().Name);
+
                                 await handler.RespondAsync(context);
                                 if (context.handled)
+                                {
+                                    Console.ForegroundColor = ConsoleColor.Green;
+                                    Console.WriteLine("Handled by: " + handler.GetType().Name);
+
                                     return;
+                                }
+
+                                Console.ForegroundColor = ConsoleColor.DarkGray;
                             }
+
+                            Console.ForegroundColor = ConsoleColor.DarkGreen;
+                            Console.WriteLine("Not Handled: repond with not found");
 
                             responseBytes = GetNotFoundBytes(uri);
                             contentType = MimeUtils.GetMimeType("html");

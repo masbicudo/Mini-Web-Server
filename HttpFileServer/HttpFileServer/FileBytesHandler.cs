@@ -32,10 +32,19 @@ namespace HttpFileServer
             if (!fileDate.HasValue)
                 return;
 
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.WriteLine(context.Uri.LocalPath);
             var fileBytes = TryCatch(() => File.ReadAllBytes(fileFullName), e => null);
 
             if (fileBytes == null)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine(context.Uri.LocalPath);
                 return;
+            }
+
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+            Console.WriteLine(context.Uri.LocalPath);
 
             string contentType = MimeUtils.GetMimeType(Path.GetExtension(fileFullName));
 
@@ -56,6 +65,9 @@ namespace HttpFileServer
                 // writing file contents
                 await context.Output.WriteAsync(fileBytes, 0, fileBytes.Length);
             }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(context.Uri.LocalPath);
 
             context.Handled();
         }
