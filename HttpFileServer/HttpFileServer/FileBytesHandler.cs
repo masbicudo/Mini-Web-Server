@@ -64,6 +64,7 @@ namespace HttpFileServer
 
                 // writing file contents
                 await context.Output.WriteAsync(fileBytes, 0, fileBytes.Length);
+                await context.Output.FlushAsync();
             }
 
             Console.ForegroundColor = ConsoleColor.Green;
