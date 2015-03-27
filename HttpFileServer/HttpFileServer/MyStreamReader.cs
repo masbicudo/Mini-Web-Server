@@ -11,6 +11,7 @@ namespace TGREER
         internal const int DefaultBufferSize = 1024;  // Byte buffer size
         private const int DefaultFileStreamBufferSize = 4096;
         private const int MinBufferSize = 128;
+        private bool leaveOpen;
         private Stream stream;
         private Encoding encoding;
         private Decoder decoder;
@@ -38,22 +39,26 @@ namespace TGREER
         {
         }
         public MyStreamReader(Stream stream)
-            : this(stream, Encoding.UTF8, true, DefaultBufferSize)
+            : this(stream, Encoding.UTF8, true, DefaultBufferSize, false)
         {
         }
         public MyStreamReader(Stream stream, bool detectEncodingFromByteOrderMarks)
-            : this(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultBufferSize)
+            : this(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultBufferSize, false)
         {
         }
         public MyStreamReader(Stream stream, Encoding encoding)
-            : this(stream, encoding, true, DefaultBufferSize)
+            : this(stream, encoding, true, DefaultBufferSize, false)
         {
         }
         public MyStreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks)
-            : this(stream, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize)
+            : this(stream, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize, false)
         {
         }
         public MyStreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
+            : this(stream, encoding, detectEncodingFromByteOrderMarks, bufferSize, false)
+        {
+        }
+        public MyStreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize, bool leaveOpen)
         {
             if (stream == null || encoding == null)
                 throw new ArgumentNullException((stream == null ? "stream" : "encoding"));
@@ -61,30 +66,34 @@ namespace TGREER
                 throw new ArgumentException(Environment.GetEnvironmentVariable("Argument_StreamNotReadable"));
             if (bufferSize <= 0)
                 throw new ArgumentOutOfRangeException("bufferSize", Environment.GetEnvironmentVariable("ArgumentOutOfRange_NeedPosNum"));
-            Init(stream, encoding, detectEncodingFromByteOrderMarks, bufferSize);
+            Init(stream, encoding, detectEncodingFromByteOrderMarks, bufferSize, leaveOpen);
         }
         /// <include file='doc\myStreamReader.uex' path='docs/doc[@for="myStreamReader.myStreamReader4"]/*' />
         public MyStreamReader(String path)
-            : this(path, Encoding.UTF8, true, DefaultBufferSize)
+            : this(path, Encoding.UTF8, true, DefaultBufferSize, false)
         {
         }
         /// <include file='doc\myStreamReader.uex' path='docs/doc[@for="myStreamReader.myStreamReader9"]/*' />
         public MyStreamReader(String path, bool detectEncodingFromByteOrderMarks)
-            : this(path, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultBufferSize)
+            : this(path, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultBufferSize, false)
         {
         }
         /// <include file='doc\myStreamReader.uex' path='docs/doc[@for="myStreamReader.myStreamReader5"]/*' />
         public MyStreamReader(String path, Encoding encoding)
-            : this(path, encoding, true, DefaultBufferSize)
+            : this(path, encoding, true, DefaultBufferSize, false)
         {
         }
         /// <include file='doc\myStreamReader.uex' path='docs/doc[@for="myStreamReader.myStreamReader6"]/*' />
         public MyStreamReader(String path, Encoding encoding, bool detectEncodingFromByteOrderMarks)
-            : this(path, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize)
+            : this(path, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize, false)
+        {
+        }
+        public MyStreamReader(String path, Encoding encoding, bool detectEncodingFromByteOrderMarks, bool leaveOpen)
+            : this(path, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize, leaveOpen)
         {
         }
         /// <include file='doc\myStreamReader.uex' path='docs/doc[@for="myStreamReader.myStreamReader7"]/*' />
-        public MyStreamReader(String path, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
+        public MyStreamReader(String path, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize, bool leaveOpen)
         {
             // Don't open a Stream before checking for invalid arguments,
             // or we'll create a FileStream on disk and we won't close it until
@@ -96,10 +105,11 @@ namespace TGREER
             if (bufferSize <= 0)
                 throw new ArgumentOutOfRangeException("bufferSize", Environment.GetEnvironmentVariable("ArgumentOutOfRange_NeedPosNum"));
             Stream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, DefaultFileStreamBufferSize);
-            Init(stream, encoding, detectEncodingFromByteOrderMarks, bufferSize);
+            Init(stream, encoding, detectEncodingFromByteOrderMarks, bufferSize, leaveOpen);
         }
-        private void Init(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
+        private void Init(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize, bool leaveOpen)
         {
+            this.leaveOpen = leaveOpen;
             this.stream = stream;
             this.encoding = encoding;
             decoder = encoding.GetDecoder();
@@ -123,7 +133,7 @@ namespace TGREER
         {
             if (disposing)
             {
-                if (stream != null)
+                if (stream != null && !this.leaveOpen)
                     stream.Close();
             }
             if (stream != null)

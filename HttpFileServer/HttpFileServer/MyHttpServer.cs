@@ -177,8 +177,8 @@ namespace HttpFileServer
                 {
                     Console.ForegroundColor = ConsoleColor.Blue;
                     Console.WriteLine("Handling client");
-                    using (var reader = new MyStreamReader(stream, Encoding.ASCII))
-                    using (var writer = new StreamWriter(stream, Encoding.ASCII))
+                    using (var reader = new MyStreamReader(stream, Encoding.ASCII, false, 1024, true))
+                    using (var writer = new StreamWriter(stream, Encoding.ASCII, 1024, true))
                     {
                         string line;
 
