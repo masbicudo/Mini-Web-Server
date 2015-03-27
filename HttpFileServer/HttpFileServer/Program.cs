@@ -35,7 +35,7 @@ namespace HttpFileServer
 #endif
 
         [STAThread]
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             var allArgs = string.Join(" ", args);
             SetRootPath(allArgs);
@@ -46,9 +46,12 @@ namespace HttpFileServer
 
             var answers = new ConcurrentQueue<Tuple<int, bool>>();
 
+#if false
             Messages.ReceiveString += (str) =>
             {
-                var match1 = Regex.Match(str, @"^(?<PID>\d+)\: ARE YOU SERVING ""(?<PATH>[^""]*)""?$");
+                var match1 = Regex.Match(
+                    str,
+                    @"^(?<PID>\d+)\: ARE YOU SERVING ""(?<PATH>[^""]*)""?$");
                 if (match1.Success)
                 {
                     var path = match1.Groups["PATH"].Value;
@@ -110,6 +113,7 @@ namespace HttpFileServer
 
                 Thread.Sleep(1);
             }
+#endif
 
             InitCloseHandle();
             InitTrayIcon();
