@@ -154,6 +154,8 @@ namespace HttpFileServer
                 // writing file contents
                 await context.Output.WriteAsync(iconBytes, 0, iconBytes.Length);
             }
+
+            context.Handled();
         }
 
         private static byte[] IconAsSizedPng(Icon icon, int size)
