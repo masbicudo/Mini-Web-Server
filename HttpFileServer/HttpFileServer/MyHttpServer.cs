@@ -190,6 +190,7 @@ namespace HttpFileServer
                             Console.ForegroundColor = ConsoleColor.Red;
                             Console.WriteLine("Null request first line");
                             Console.ForegroundColor = oldColor;
+                            return;
                         }
 
                         HttpVerbs verb = 0;
