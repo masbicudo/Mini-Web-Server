@@ -26,12 +26,12 @@ namespace HttpFileServer
         /// <summary>
         /// Starts the file HTTP server.
         /// </summary>
-        /// <param name="host">The host to accept requests for.</param>
+        /// <param name="hostPattern">The host to accept requests for. Accepts '*' characters to indicate any string.</param>
         /// <param name="port">The port number to accept connections.</param>
-        public void Start(string host = "localhost", int port = 80)
+        public void Start(string hostPattern = "localhost", int port = 80)
         {
-            if (host == null)
-                throw new ArgumentNullException("host");
+            if (hostPattern == null)
+                throw new ArgumentNullException("hostPattern");
 
             this.tcpListenerIPv4 = new TcpListener(IPAddress.Any, port);
             this.tcpListenerIPv4.Start();
@@ -45,7 +45,7 @@ namespace HttpFileServer
 
             var taskIPv4 = this.ListeningToClientsIPv4();
             var taskIPv6 = this.ListeningToClientsIPv6();
-            this.host = host;
+            this.hostPattern = hostPattern;
 
             this.thread = new Thread(
                 () =>
@@ -149,7 +149,7 @@ namespace HttpFileServer
                 };
 
         private string basePath;
-        private string host;
+        private string hostPattern;
 
         private DateTime? dateFirstIcon = null;
 
@@ -182,6 +182,8 @@ namespace HttpFileServer
                     {
                         string line;
 
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
+                        Console.WriteLine("Trying to read request data");
                         line = reader.ReadLine();
 
                         if (line == null)
@@ -192,6 +194,9 @@ namespace HttpFileServer
                             Console.ForegroundColor = oldColor;
                             return;
                         }
+
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("Reading request data");
 
                         HttpVerbs verb = 0;
                         string path = null;
@@ -276,7 +281,7 @@ namespace HttpFileServer
                             }
                         }
 
-                        if (host != this.host)
+                        if (!StringHelper.IsStrMatch(host, this.hostPattern))
                             throw new Exception("Cannot accept host: " + host);
 
                         string pathNoQuery;
@@ -480,6 +485,14 @@ namespace HttpFileServer
         public object GetService(Type serviceType)
         {
             throw new NotImplementedException();
+        }
+    }
+
+    internal class StringHelper
+    {
+        public static bool IsStrMatch(string input, string pattern)
+        {
+            return Regex.IsMatch(input, @"^" + Regex.Escape(pattern).Replace("\\*", ".*") + @"$", RegexOptions.IgnoreCase);
         }
     }
 }

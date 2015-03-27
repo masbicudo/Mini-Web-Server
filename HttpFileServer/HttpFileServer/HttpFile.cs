@@ -59,6 +59,9 @@ namespace HttpFileServer
 
             [XmlAttribute("serializeResponses")]
             public bool SerializeResponses { get; set; }
+
+            [XmlAttribute("acceptHostPattern")]
+            public string AcceptHostPattern { get; set; }
         }
 
         public class OnStartItem

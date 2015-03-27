@@ -198,6 +198,7 @@ namespace HttpFileServer
             ConfigurationManager.RefreshSection("appSettings");
             var appSettings_Host = (conf == null ? null : conf.Host) ?? ConfigurationManager.AppSettings["host"];
             var appSettings_Port = FirstInt(conf == null ? null : conf.Port, ConfigurationManager.AppSettings["port"]) ?? 12345;
+            var appSettings_AcceptHostPattern = (conf == null ? null : conf.AcceptHostPattern) ?? ConfigurationManager.AppSettings["acceptHostPattern"];
 
             var allTypes = AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes());
 
@@ -254,12 +255,15 @@ namespace HttpFileServer
                            ? "localhost"
                            : appSettings_Host;
 
+            if (string.IsNullOrWhiteSpace(appSettings_AcceptHostPattern))
+                appSettings_AcceptHostPattern = usedHost;
+
             usedPort = 0;
             for (int it = 0; it < 100; it++)
                 try
                 {
                     usedPort = appSettings_Port + it;
-                    server.Start(usedHost, usedPort);
+                    server.Start(appSettings_AcceptHostPattern, usedPort);
                     break;
                 }
                 catch
