@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -20,7 +21,7 @@ using TGREER;
 
 namespace HttpFileServer
 {
-    class Program
+    internal class Program
     {
         private static int usedPort;
         private static string usedHost;
@@ -141,7 +142,7 @@ namespace HttpFileServer
 #endif
         }
 
-        static int? FirstInt(params object[] els)
+        private static int? FirstInt(params object[] els)
         {
             foreach (var el in els)
             {
@@ -155,15 +156,15 @@ namespace HttpFileServer
             return null;
         }
 
-        static void WatcherDisposed(object sender, EventArgs e)
+        private static void WatcherDisposed(object sender, EventArgs e)
         {
         }
 
-        static void WatcherError(object sender, ErrorEventArgs e)
+        private static void WatcherError(object sender, ErrorEventArgs e)
         {
         }
 
-        static void WatcherEvent(object sender, FileSystemEventArgs e)
+        private static void WatcherEvent(object sender, FileSystemEventArgs e)
         {
             StartServer();
         }
@@ -197,8 +198,10 @@ namespace HttpFileServer
 
             ConfigurationManager.RefreshSection("appSettings");
             var appSettings_Host = (conf == null ? null : conf.Host) ?? ConfigurationManager.AppSettings["host"];
-            var appSettings_Port = FirstInt(conf == null ? null : conf.Port, ConfigurationManager.AppSettings["port"]) ?? 12345;
-            var appSettings_AcceptHostPattern = (conf == null ? null : conf.AcceptHostPattern) ?? ConfigurationManager.AppSettings["acceptHostPattern"];
+            var appSettings_Port = FirstInt(conf == null ? null : conf.Port, ConfigurationManager.AppSettings["port"])
+                                   ?? 12345;
+            var appSettings_AcceptHostPattern = (conf == null ? null : conf.AcceptHostPattern)
+                                                ?? ConfigurationManager.AppSettings["acceptHostPattern"];
 
             var allTypes = AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetTypes());
 
@@ -252,8 +255,8 @@ namespace HttpFileServer
             var prevHost = usedHost;
 
             usedHost = string.IsNullOrWhiteSpace(appSettings_Host)
-                           ? "localhost"
-                           : appSettings_Host;
+                ? "localhost"
+                : appSettings_Host;
 
             if (string.IsNullOrWhiteSpace(appSettings_AcceptHostPattern))
                 appSettings_AcceptHostPattern = usedHost;
@@ -279,7 +282,9 @@ namespace HttpFileServer
 
             var start = StringComparer.InvariantCultureIgnoreCase.Equals(
                 ConfigurationManager.AppSettings["start-browser"],
-                "TRUE") || conf != null && conf.OnStart != null && !string.IsNullOrWhiteSpace(conf.OnStart.OpenInBrowser);
+                "TRUE")
+                        || conf != null && conf.OnStart != null
+                        && !string.IsNullOrWhiteSpace(conf.OnStart.OpenInBrowser);
 
             bool allowOpenInBrowser = prevPort != usedPort || prevHost != usedHost;
             if (start && allowOpenInBrowser)
@@ -290,6 +295,7 @@ namespace HttpFileServer
         }
 
         #region Tray Icon
+
         // reference: http://sleepycoders.blogspot.com.br/2011/04/c-console-application-in-system-tray.html
 
         private static readonly NotifyIcon TrayIcon = new NotifyIcon();
@@ -305,15 +311,16 @@ namespace HttpFileServer
             TrayIcon.MouseClick += TrayIcon_Click;
 
             TrayIcon.ContextMenuStrip = new ContextMenuStrip();
-            TrayIcon.ContextMenuStrip.Items.AddRange(new[]
-                {
-                    new ToolStripMenuItem("Open in browser", null, openInBrowser),
-                    new ToolStripMenuItem("Make request", null, testRequest),
-                    new ToolStripMenuItem("Restart", null, restart),
-                    new ToolStripMenuItem("Associate *.http files", null, assocHttp),
-                    new ToolStripMenuItem("Open .http file", null, openHttp),
-                    new ToolStripMenuItem("Exit", null, smoothExit),
-                });
+            TrayIcon.ContextMenuStrip.Items.AddRange(
+                new[]
+                    {
+                        new ToolStripMenuItem("Open in browser", null, openInBrowser),
+                        new ToolStripMenuItem("Make request", null, testRequest),
+                        new ToolStripMenuItem("Restart", null, restart),
+                        new ToolStripMenuItem("Associate *.http files", null, assocHttp),
+                        new ToolStripMenuItem("Open .http file", null, openHttp),
+                        new ToolStripMenuItem("Exit", null, smoothExit),
+                    });
 
             TrayIcon.Visible = true;
 
@@ -414,7 +421,10 @@ namespace HttpFileServer
 
                 await writer.WriteHttpHeaderAsync("Host", uri.Host);
                 await writer.WriteHttpHeaderAsync("Cache-Control", "max-age=0");
-                await writer.WriteHttpHeaderAsync("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+                await
+                    writer.WriteHttpHeaderAsync(
+                        "Accept",
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
                 await writer.WriteHttpHeaderAsync("User-Agent", "Mini-Http-Client");
                 await writer.WriteHttpHeaderAsync("Accept-Language", "en-US");
                 await writer.WriteHttpHeaderAsync("");
@@ -475,7 +485,9 @@ namespace HttpFileServer
                 var dateLastReceived = DateTime.UtcNow;
                 while (remaining > 0 || contentLength < 0)
                 {
-                    var cnt = await stream.ReadAsync(buffer, 0, Math.Min((int)Math.Min(remaining, int.MaxValue), buffer.Length));
+                    var cnt =
+                        await
+                            stream.ReadAsync(buffer, 0, Math.Min((int)Math.Min(remaining, int.MaxValue), buffer.Length));
                     remaining -= cnt;
                     if (cnt == 0 && contentLength == -1)
                     {
@@ -495,10 +507,13 @@ namespace HttpFileServer
 
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
         private static Int32 showWindow = 0; //0 - SW_HIDE - Hides the window and activates another window.
+
         #endregion
 
         #region Trap application termination
+
         // reference: http://stackoverflow.com/questions/474679/capture-console-exit-c-sharp
 
         [DllImport("Kernel32")]
@@ -512,9 +527,10 @@ namespace HttpFileServer
         }
 
         private delegate bool EventHandler(CtrlType sig);
-        static EventHandler _handler;
 
-        enum CtrlType
+        private static EventHandler _handler;
+
+        private enum CtrlType
         {
             CTRL_C_EVENT = 0,
             CTRL_BREAK_EVENT = 1,
@@ -533,6 +549,7 @@ namespace HttpFileServer
 
             return true;
         }
+
         #endregion
     }
 }
