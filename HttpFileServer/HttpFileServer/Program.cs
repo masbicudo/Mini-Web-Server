@@ -12,6 +12,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -39,6 +40,13 @@ namespace HttpFileServer
         private static void Main(string[] args)
         {
             var allArgs = string.Join(" ", args);
+
+            if (allArgs == "-assocHttp")
+            {
+                assocHttp();
+                return;
+            }
+
             SetRootPath(allArgs);
 
             Messages.Init();
@@ -328,6 +336,31 @@ namespace HttpFileServer
         }
 
         private static void assocHttp(object sender, EventArgs e)
+        {
+            if (IsAdministrator() == false)
+                assocHttpRestart();
+            else
+                assocHttp();
+        }
+
+        private static void assocHttpRestart()
+        {
+            // Restart program and run as admin
+            var exeName = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+            var startInfo = new ProcessStartInfo(exeName, "-assocHttp");
+            startInfo.Verb = "runas";
+            Process.Start(startInfo);
+        }
+
+
+        private static bool IsAdministrator()
+        {
+            WindowsIdentity identity = WindowsIdentity.GetCurrent();
+            WindowsPrincipal principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+
+        private static void assocHttp()
         {
             FileAssociationHelper.SetAssociation(
                 ".http",
