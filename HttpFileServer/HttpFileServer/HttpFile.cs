@@ -19,7 +19,22 @@ namespace HttpFileServer
             try
             {
                 if (File.Exists(path))
-                    using (var reader = XmlReader.Create(path))
+                {
+                    var text = File.ReadAllText(path);
+                    var tr = new StringReader(text);
+                    if (!string.IsNullOrWhiteSpace(text))
+                        using (var reader = XmlReader.Create(tr))
+                            return (ConfigurationItem)ser.Deserialize(reader);
+                }
+            }
+            catch (FileNotFoundException)
+            {
+            }
+
+            try
+            {
+                if (File.Exists("default.http"))
+                    using (var reader = XmlReader.Create("default.http"))
                         return (ConfigurationItem)ser.Deserialize(reader);
             }
             catch (FileNotFoundException)
